@@ -11,4 +11,11 @@ make all
 1. `Go` compiler (for building and running tests only)
 2. `Python3` (for serving only)
 
-## Testing (TBD)
+## Testing
+Run unit tests with the Ebiten stubs enabled:
+
+```sh
+go test -tags test ./core/... ./internal/ui
+```
+
+Using the real Ebiten library requires an X11 environment with the appropriate dev packages installed; tests without the `test` tag will fail on a headless machine.
