@@ -4,9 +4,10 @@ import (
 	"image"
 	"image/color"
 	"math"
-	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/ingyamilmolinar/tunkul/core/beat"
+	"github.com/ingyamilmolinar/tunkul/core/model"
 )
 
 const topOffset = 40 // transport bar height in px
@@ -14,15 +15,16 @@ const topOffset = 40 // transport bar height in px
 /* ─────────────── data types ───────────────────────────────────────────── */
 
 type uiNode struct {
+	ID   model.NodeID
 	I, J int     // grid indices
 	X, Y float64 // cached world coords (GridStep*I, GridStep*J)
 }
 type uiEdge struct{ A, B *uiNode }
 
 type dragLink struct {
-	from   *uiNode
+	from     *uiNode
 	toX, toY float64
-	active bool
+	active   bool
 }
 
 type pulse struct {
@@ -32,10 +34,11 @@ type pulse struct {
 
 type Game struct {
 	// subsystems
-	cam       *Camera
-	split     *Splitter
-	model     *GridModel
-	drum      *DrumView
+	cam   *Camera
+	split *Splitter
+	drum  *DrumView
+	graph *model.Graph
+	sched *beat.Scheduler
 
 	// graph
 	nodes []*uiNode
@@ -46,22 +49,22 @@ type Game struct {
 	frame  int
 
 	// editor state
-	sel      *uiNode
-	linkDrag dragLink
-
-	lastAdd       time.Time
-	beatTicker time.Time
-	winW, winH    int
+	sel        *uiNode
+	linkDrag   dragLink
+	winW, winH int
 }
 
 /* ─────────────── constructor & layout ─────────────────────────────────── */
 
 func New() *Game {
 	g := &Game{cam: NewCamera()}
-	g.model = NewModel()                 // single-row prototype
-	g.split = NewSplitter(720)           // temporary; real height set in Layout
+	g.graph = model.NewGraph()
+	g.sched = beat.NewScheduler(g.graph)
+	g.split = NewSplitter(720) // temporary; real height set in Layout
 	g.drum = NewDrumView(image.Rect(0, g.split.Y, 1280, 720))
-	g.drum.Rows = g.model.Rows
+	g.drum.Rows = []*DrumRow{{Name: "H"}}
+	g.drum.Rows[0].Steps = g.graph.Row
+	g.sched.OnBeat = func(i int) { g.onBeat(i) }
 	return g
 }
 
@@ -90,9 +93,10 @@ func (g *Game) tryAddNode(i, j int) *uiNode {
 	}
 	x := float64(i * GridStep)
 	y := float64(j * GridStep)
-	n := &uiNode{I: i, J: j, X: x, Y: y}
+	id := g.graph.AddNode(i, j)
+	n := &uiNode{ID: id, I: i, J: j, X: x, Y: y}
 	g.nodes = append(g.nodes, n)
-	g.model.Toggle(i, j) // update drum row
+	g.drum.Rows[0].Steps = g.graph.Row
 	return n
 }
 
@@ -112,7 +116,8 @@ func (g *Game) deleteNode(n *uiNode) {
 		}
 	}
 	g.edges = keep
-	g.model.Toggle(n.I, n.J) // turn off drum cell
+	g.graph.RemoveNode(n.ID)
+	g.drum.Rows[0].Steps = g.graph.Row
 }
 
 func (g *Game) addEdge(a, b *uiNode) {
@@ -144,7 +149,7 @@ func (g *Game) deleteEdge(a, b *uiNode) {
 /* ─────────────── input handling ───────────────────────────────────────── */
 
 func (g *Game) handleEditor() {
-	left  := ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft)
+	left := ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft)
 	right := ebiten.IsMouseButtonPressed(ebiten.MouseButtonRight)
 	shift := ebiten.IsKeyPressed(ebiten.KeyShiftLeft) || ebiten.IsKeyPressed(ebiten.KeyShiftRight)
 
@@ -232,28 +237,21 @@ func (g *Game) Update() error {
 		i++
 	}
 
+	g.drum.Rows[0].Steps = g.graph.Row
 	// drum view logic
 	g.drum.Update()
-	/*
 	if g.drum.playing {
-		spb := time.Minute / time.Duration(g.drum.bpm) // sec/beat
-		if time.Since(g.lastAdd) >= spb {
-			if root := g.rootNode(); root != nil {
-				g.spawnPulseFrom(root, 1) // 1 square per beat
-			}
-			g.lastAdd = time.Now()
-		}
-	*/
-
-	if g.drum.playing { g.tickBeat() }
+		g.sched.BPM = g.drum.bpm
+		g.sched.Tick()
+	}
 	return nil
 }
 
 /* ─────────────── Draw ─────────────────────────────────────────────────── */
 
 func (g *Game) Draw(screen *ebiten.Image) {
-	g.drawGridPane(screen)  // top
-	g.drawDrumPane(screen)  // bottom (includes buttons)
+	g.drawGridPane(screen) // top
+	g.drawDrumPane(screen) // bottom (includes buttons)
 }
 
 func (g *Game) drawGridPane(screen *ebiten.Image) {
@@ -318,7 +316,7 @@ func (g *Game) drawGridPane(screen *ebiten.Image) {
 	DrawLineCam(screen,
 		0, float64(g.split.Y),
 		float64(g.winW), float64(g.split.Y),
-			&id, color.RGBA{90, 90, 90, 255}, 2)
+		&id, color.RGBA{90, 90, 90, 255}, 2)
 }
 func (g *Game) drawDrumPane(dst *ebiten.Image) {
 	g.drum.Draw(dst)
@@ -327,13 +325,20 @@ func (g *Game) drawDrumPane(dst *ebiten.Image) {
 func (g *Game) rootNode() *uiNode {
 	var root *uiNode
 	for _, n := range g.nodes {
-		if n.J != 0 { continue }
+		if n.J != 0 {
+			continue
+		}
 		inbound := false
 		for _, e := range g.edges {
-			if e.B == n { inbound = true; break }
+			if e.B == n {
+				inbound = true
+				break
+			}
 		}
 		if !inbound {
-			if root == nil || n.I < root.I { root = n }
+			if root == nil || n.I < root.I {
+				root = n
+			}
 		}
 	}
 	return root
@@ -342,7 +347,7 @@ func (g *Game) rootNode() *uiNode {
 func (g *Game) spawnPulseFrom(n *uiNode, beats int) {
 	for _, e := range g.edges {
 		if e.A == n {
-			d := abs(e.A.I - e.B.I) + abs(e.A.J - e.B.J)
+			d := abs(e.A.I-e.B.I) + abs(e.A.J-e.B.J)
 			speed := 1 / (float64(d*beats) * 60) // 60 fps
 			g.pulses = append(g.pulses, &pulse{
 				x1: e.A.X, y1: e.A.Y, x2: e.B.X, y2: e.B.Y,
@@ -352,34 +357,19 @@ func (g *Game) spawnPulseFrom(n *uiNode, beats int) {
 	}
 }
 
-func (g *Game) tickBeat() {
-	root := g.rootNode()
-	if root == nil { return }
-
-	if g.drum.bpm <= 0 {
-			g.drum.bpm = 120
-	}
-	spb := time.Minute / time.Duration(g.drum.bpm)
-	if time.Since(g.beatTicker) < spb {
-		return
-	}
-	g.beatTicker = time.Now()
-
-	// spawn one pulse per outbound edge
-	for _, e := range g.edges {
-		if e.A != root { continue }
-		dist := abs(e.A.I-e.B.I) + abs(e.A.J-e.B.J)
-		speed := 1 / (float64(dist) * 60)
-		g.pulses = append(g.pulses, &pulse{
-			x1: e.A.X, y1: e.A.Y, x2: e.B.X, y2: e.B.Y,
-			speed: speed,
-		})
+func (g *Game) onBeat(step int) {
+	if root := g.rootNode(); root != nil {
+		g.spawnPulseFrom(root, 1)
 	}
 }
-
 
 /* ─────────────── math helpers ─────────────────────────────────────────── */
 
 func atan2(y, x float64) float64 { return math.Atan2(y, x) }
 func hypot(a, b float64) float64 { return math.Hypot(a, b) }
-func abs(i int) int { if i < 0 { return -i }; return i }
+func abs(i int) int {
+	if i < 0 {
+		return -i
+	}
+	return i
+}
