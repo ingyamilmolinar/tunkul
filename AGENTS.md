@@ -9,6 +9,15 @@
 - UI code resides under `src/go/internal/ui`. Automated tests rely on the Ebiten stubs via `go.test.mod`.
 - For native builds using the real Ebiten library, run `scripts/setup-ebiten-env.sh` to install the necessary system packages (Homebrew or apt).
 
+### Headless X11
+Install `xvfb` and run the game via `xvfb-run` on systems without a display:
+
+```sh
+sudo apt-get install -y xvfb
+xvfb-run go run ./cmd/tunkul.go
+```
+The virtual framebuffer lets Ebiten create a window while logs are printed to the console.
+
 ## Project Overview
 
 Tunkul is a grid-based beat sequencer written in Go with Ebiten. The program renders a node graph where each node represents a drum hit. A bottom drum-machine panel shows the active steps. The scheduler in `core/beat` triggers beats at a configurable BPM using the pure data structures from `core/model`. The UI layer translates mouse and keyboard input into model operations and draws the results with Ebiten.

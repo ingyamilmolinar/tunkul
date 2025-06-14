@@ -51,3 +51,20 @@ func TestOnBeatUsesRoot(t *testing.T) {
 		t.Fatalf("expected pulse from root on beat, got %d", len(g.pulses))
 	}
 }
+
+func TestUpdateRunsSchedulerWhenPlaying(t *testing.T) {
+	g := New()
+	g.Layout(640, 480)
+	// ensure first step active
+	g.graph.ToggleStep(0)
+
+	var fired int
+	g.sched.OnBeat = func(int) { fired++ }
+	g.drum.playing = true
+	g.drum.bpm = 60
+
+	g.Update()
+	if fired == 0 {
+		t.Fatalf("scheduler did not run")
+	}
+}
