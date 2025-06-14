@@ -2,6 +2,7 @@ package ui
 
 import (
 	"testing"
+	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
@@ -142,5 +143,30 @@ func TestPlayStopPulseSequence(t *testing.T) {
 	g.Update()
 	if len(g.pulses) != prev {
 		t.Fatalf("pulses changed after stop")
+	}
+}
+
+func TestPulseAnimationProgress(t *testing.T) {
+	g := New()
+	g.Layout(640, 480)
+	g.graph.ToggleStep(0)
+	a := g.tryAddNode(0, 0)
+	b := g.tryAddNode(1, 0)
+	g.addEdge(a, b)
+
+	now := time.Unix(0, 0)
+
+	g.sched.SetNowFunc(func() time.Time { now = now.Add(time.Second); return now })
+	g.drum.playing = true
+	g.drum.bpm = 60
+
+	g.Update() // spawn pulse
+	if len(g.pulses) == 0 {
+		t.Fatalf("expected pulse after play")
+	}
+	first := g.pulses[0].t
+	g.Update() // advance animation
+	if g.pulses[0].t <= first {
+		t.Fatalf("pulse did not advance: %f <= %f", g.pulses[0].t, first)
 	}
 }
