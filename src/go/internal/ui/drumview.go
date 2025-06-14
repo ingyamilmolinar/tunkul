@@ -51,9 +51,10 @@ type DrumView struct {
 
 func NewDrumView(b image.Rectangle) *DrumView {
 	return &DrumView{
-		Bounds: b,
-		labelW: 40,
-		bpm:    120,
+		Bounds:  b,
+		labelW:  40,
+		bpm:     120,
+		bgDirty: true,
 	}
 }
 

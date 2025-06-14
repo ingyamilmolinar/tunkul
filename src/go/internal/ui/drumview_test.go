@@ -57,3 +57,15 @@ func TestRowHeightConstant(t *testing.T) {
 		t.Fatalf("cell changed from %d to %d", initial, dv.cell)
 	}
 }
+
+func TestDrawAfterInit(t *testing.T) {
+	dv := setupDV()
+	dv.Update()
+	img := ebiten.NewImage(200, 100)
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("Draw panicked: %v", r)
+		}
+	}()
+	dv.Draw(img)
+}
