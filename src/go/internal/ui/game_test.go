@@ -1,6 +1,9 @@
 package ui
 
-import "testing"
+import (
+	"github.com/hajimehoshi/ebiten/v2"
+	"testing"
+)
 
 func TestTryAddNodeTogglesRow(t *testing.T) {
 	g := New()
@@ -66,5 +69,26 @@ func TestUpdateRunsSchedulerWhenPlaying(t *testing.T) {
 	g.Update()
 	if fired == 0 {
 		t.Fatalf("scheduler did not run")
+	}
+}
+
+func TestClickAddsNode(t *testing.T) {
+	g := New()
+	g.Layout(640, 480)
+
+	pressed := true
+	restore := SetInputForTest(
+		func() (int, int) { return 10, topOffset + 10 },
+		func(b ebiten.MouseButton) bool { return pressed && b == ebiten.MouseButtonLeft },
+		func(ebiten.Key) bool { return false },
+		func() []rune { return nil },
+		func() (float64, float64) { return 0, 0 },
+		func() (int, int) { return 640, 480 },
+	)
+	defer restore()
+
+	g.Update()
+	if g.nodeAt(0, 0) == nil {
+		t.Fatalf("expected node created at (0,0)")
 	}
 }

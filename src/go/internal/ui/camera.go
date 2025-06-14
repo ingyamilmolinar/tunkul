@@ -33,11 +33,13 @@ func (c *Camera) HandleMouse(allowPan bool) bool {
 	if allowPan && isMouseButtonPressed(ebiten.MouseButtonLeft) {
 		x, y := cursorPosition()
 		if last, ok := prevMousePos(); ok {
-			c.OffsetX += float64(x - last.x)
-			c.OffsetY += float64(y - last.y)
+			if x != last.x || y != last.y {
+				c.OffsetX += float64(x - last.x)
+				c.OffsetY += float64(y - last.y)
+				dragging = true
+			}
 		}
 		markMousePos(x, y)
-		dragging = true
 	} else {
 		clearMousePos()
 	}
