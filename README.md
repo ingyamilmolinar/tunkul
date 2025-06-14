@@ -12,10 +12,13 @@ make all
 2. `Python3` (for serving only)
 
 ## Testing
-Run unit tests with the Ebiten stubs enabled:
+Unit tests rely on the stubbed Ebiten API. Always run them with the alternate
+module file so the stubs are used:
 
 ```sh
-go test -tags test -modfile=go.test.mod ./core/... ./internal/ui
+cd src/go
+go test -tags test -modfile=go.test.mod ./...
 ```
 
-Using the real Ebiten library requires an X11 environment with the appropriate dev packages installed; tests without the `test` tag will fail on a headless machine.
+Running `go test -tags test ./...` without `-modfile` tries to use the real
+Ebiten library and will fail unless you have a full X11 environment installed.
