@@ -18,3 +18,36 @@ func TestDeleteNodeClearsRow(t *testing.T) {
 		t.Fatalf("expected step 1 off after delete")
 	}
 }
+
+func TestAddEdgeNoDuplicates(t *testing.T) {
+	g := New()
+	a := g.tryAddNode(0, 0)
+	b := g.tryAddNode(1, 0)
+	g.addEdge(a, b)
+	g.addEdge(a, b)
+	if len(g.edges) != 1 {
+		t.Fatalf("expected 1 edge, got %d", len(g.edges))
+	}
+}
+
+func TestSpawnPulseFrom(t *testing.T) {
+	g := New()
+	a := g.tryAddNode(0, 0)
+	b := g.tryAddNode(1, 0)
+	g.addEdge(a, b)
+	g.spawnPulseFrom(a, 1)
+	if len(g.pulses) != 1 {
+		t.Fatalf("expected 1 pulse, got %d", len(g.pulses))
+	}
+}
+
+func TestOnBeatUsesRoot(t *testing.T) {
+	g := New()
+	a := g.tryAddNode(0, 0)
+	b := g.tryAddNode(2, 0)
+	g.addEdge(a, b)
+	g.onBeat(0)
+	if len(g.pulses) != 1 {
+		t.Fatalf("expected pulse from root on beat, got %d", len(g.pulses))
+	}
+}

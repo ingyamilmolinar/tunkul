@@ -45,3 +45,14 @@ const (
 	KeyShiftRight
 	KeyBackspace
 )
+
+// Window and run stubs
+type Game interface {
+	Update() error
+	Draw(*Image)
+	Layout(int, int) (int, int)
+}
+
+func SetWindowSize(w, h int)      {}
+func SetWindowTitle(title string) {}
+func RunGame(g Game) error        { return nil }
