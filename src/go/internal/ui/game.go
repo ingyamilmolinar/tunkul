@@ -49,9 +49,10 @@ type Game struct {
 	frame  int
 
 	// editor state
-	sel        *uiNode
-	linkDrag   dragLink
-	winW, winH int
+	sel         *uiNode
+	linkDrag    dragLink
+	camDragging bool
+	winW, winH  int
 }
 
 /* ─────────────── constructor & layout ─────────────────────────────────── */
@@ -177,7 +178,7 @@ func (g *Game) handleEditor() {
 	}
 
 	// ---------------- plain left-click → add/select node ---------
-	if left && !right && !shift && !ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft|ebiten.MouseButtonRight) {
+	if left && !shift && !right && !g.linkDrag.active && !g.camDragging {
 		n := g.tryAddNode(i, j)
 		g.sel = n
 	}
@@ -216,11 +217,14 @@ func (g *Game) handleLinkDrag(left, right bool, gx, gy float64, i, j int) {
 func (g *Game) Update() error {
 	// splitter
 	g.split.Update()
+	g.drum.Bounds.Min.Y = g.split.Y
+	g.drum.Bounds.Max.Y = g.winH
+	g.drum.recalcButtons()
 
 	// camera pan only when not dragging link or splitter
 	shift := ebiten.IsKeyPressed(ebiten.KeyShiftLeft) || ebiten.IsKeyPressed(ebiten.KeyShiftRight)
 	panOK := !g.linkDrag.active && !g.split.dragging && !shift
-	g.cam.HandleMouse(panOK)
+	g.camDragging = g.cam.HandleMouse(panOK)
 
 	// editor interactions
 	g.handleEditor()

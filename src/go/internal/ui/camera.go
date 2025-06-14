@@ -20,7 +20,7 @@ func (c *Camera) GeoM() ebiten.GeoM {
 }
 
 // HandleMouse mutates Scale / Offset by reading Ebiten’s mouse state.
-func (c *Camera) HandleMouse(allowPan bool) {
+func (c *Camera) HandleMouse(allowPan bool) bool {
 	_, wheelY := ebiten.Wheel() // we don’t need wheelX yet
 	if wheelY != 0 {
 		if wheelY > 0 {
@@ -29,7 +29,7 @@ func (c *Camera) HandleMouse(allowPan bool) {
 			c.Scale *= 0.9
 		}
 	}
-
+	dragging := false
 	if allowPan && ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
 		x, y := ebiten.CursorPosition()
 		if last, ok := prevMousePos(); ok {
@@ -37,9 +37,11 @@ func (c *Camera) HandleMouse(allowPan bool) {
 			c.OffsetY += float64(y - last.y)
 		}
 		markMousePos(x, y)
+		dragging = true
 	} else {
 		clearMousePos()
 	}
+	return dragging
 }
 
 /* ─── internal helpers ─── */
@@ -56,4 +58,3 @@ func prevMousePos() (mousePos, bool) {
 }
 func markMousePos(x, y int) { p := mousePos{x, y}; lastMouse = &p }
 func clearMousePos()        { lastMouse = nil }
-

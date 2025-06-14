@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"strconv"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -18,25 +19,27 @@ type DrumRow struct {
 	Color  color.Color
 }
 
+/* ───────────────────────────────────────────────────────────── */
+
 type DrumView struct {
 	Rows   []*DrumRow
 	Bounds image.Rectangle
 
-	cell   int // px per cell
+	cell   int // px per step
 	labelW int
 
-	// cached bg
 	bgDirty bool
 	bgCache []*ebiten.Image
 
-	// beat-count buttons
+	// ui widgets (re-computed every frame)
 	minusBtn image.Rectangle
 	plusBtn  image.Rectangle
-	playing  bool
-	bpm      int
 	playBtn  image.Rectangle
 	stopBtn  image.Rectangle
 	bpmBox   image.Rectangle
+
+	playing  bool
+	bpm      int
 	focusBPM bool
 
 	// drag-rotate
@@ -45,61 +48,51 @@ type DrumView struct {
 }
 
 /* ─── ctor ────────────────────────────────────────── */
+
 func NewDrumView(b image.Rectangle) *DrumView {
-	v := &DrumView{
-		Bounds:  b,
-		labelW:  40,
-		bgDirty: true,
-		dragRow: -1,
-		bpm:     120,
-		cell:    40,
+	return &DrumView{
+		Bounds: b,
+		labelW: 40,
+		bpm:    120,
 	}
-	return v
 }
 
-/* ─── interaction ─────────────────────────────────── */
-
-func (dv *DrumView) inside(px, py int) bool {
-	return px >= dv.Bounds.Min.X && px < dv.Bounds.Max.X &&
-		py >= dv.Bounds.Min.Y && py < dv.Bounds.Max.Y
-}
+/* ─── public update ───────────────────────────────── */
 
 func (dv *DrumView) Update() {
 	if len(dv.Rows) == 0 {
 		return
 	}
+	dv.recalcButtons()
 	dv.calcLayout()
 
 	mx, my := ebiten.CursorPosition()
+
+	/* ——— widget clicks ——— */
 	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
-		// beat-count buttons
-		if ptIn(mx, my, dv.minusBtn) {
+		switch {
+		case pt(mx, my, dv.minusBtn):
 			dv.resizeSteps(-1)
 			return
-		}
-		if ptIn(mx, my, dv.plusBtn) {
+		case pt(mx, my, dv.plusBtn):
 			dv.resizeSteps(+1)
 			return
-		}
-	}
-
-	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
-		if ptIn(mx, my, dv.playBtn) {
+		case pt(mx, my, dv.playBtn):
 			dv.playing = true
-		}
-		if ptIn(mx, my, dv.stopBtn) {
+		case pt(mx, my, dv.stopBtn):
 			dv.playing = false
-		}
-		if ptIn(mx, my, dv.bpmBox) {
+		case pt(mx, my, dv.bpmBox):
 			dv.focusBPM = true
-		} else {
+		default:
 			dv.focusBPM = false
 		}
 	}
+
 	if dv.focusBPM {
 		for _, r := range ebiten.InputChars() {
 			if r >= '0' && r <= '9' {
-				dv.bpm = dv.bpm*10 + int(r-'0')
+				v, _ := strconv.Atoi(string(r))
+				dv.bpm = dv.bpm*10 + v
 				if dv.bpm > 300 {
 					dv.bpm = 300
 				}
@@ -113,8 +106,8 @@ func (dv *DrumView) Update() {
 		}
 	}
 
-	// rotate strip drag
-	if !dv.inside(mx, my) {
+	/* ——— strip rotate ——— */
+	if !pt(mx, my, dv.Bounds) {
 		dv.dragRow = -1
 		return
 	}
@@ -145,43 +138,33 @@ func (dv *DrumView) Update() {
 	}
 }
 
-/* ─── beat-count resize ───────────────────────────── */
+/* ─── layout helpers ───────────────────────────────── */
+
 func (dv *DrumView) resizeSteps(dir int) {
 	row := dv.Rows[0]
 	switch dir {
 	case -1:
 		if len(row.Steps) > 4 {
 			row.Steps = row.Steps[:len(row.Steps)/2]
-			dv.refreshLayout()
 		}
 	case +1:
 		if len(row.Steps) < 64 {
 			row.Steps = append(row.Steps, row.Steps...)
-			dv.refreshLayout()
 		}
 	}
-}
-
-/* ─── cached background & layout ──────────────────── */
-
-// calcCell ensures a sane default size for a drum row.
-func (dv *DrumView) calcCell() {
-	if dv.cell == 0 {
-		dv.cell = 40
-	}
-}
-
-func (dv *DrumView) refreshLayout() {
-	dv.calcCell()
 	dv.bgDirty = true
-	dv.rebuildBG()
-	if off := len(dv.Rows[0].Steps); off > 0 {
-		dv.Rows[0].Offset %= off
-	}
 }
 
 func (dv *DrumView) calcLayout() {
-	dv.calcCell()
+	steps := len(dv.Rows[0].Steps)
+	if steps == 0 {
+		steps = 4
+	}
+	// wide as the panel
+	dv.cell = (dv.Bounds.Dx() - dv.labelW) / steps
+	if dv.cell < 20 {
+		dv.cell = 20
+	}
 	if dv.bgDirty {
 		dv.rebuildBG()
 		dv.bgDirty = false
@@ -191,32 +174,31 @@ func (dv *DrumView) calcLayout() {
 func (dv *DrumView) rebuildBG() {
 	dv.bgCache = make([]*ebiten.Image, len(dv.Rows))
 	for idx := range dv.Rows {
-		w := dv.Bounds.Dx()
-		h := dv.cell
-		img := ebiten.NewImage(w, h)
+		rowH := dv.cell
+		img := ebiten.NewImage(dv.Bounds.Dx(), rowH)
 		img.Fill(color.RGBA{30, 30, 30, 255})
 
-		// vertical grid
+		// vertical guides
 		for i := 0; i <= len(dv.Rows[idx].Steps); i++ {
 			x := dv.labelW + i*dv.cell
-			drawLine(img, float64(x), 0, float64(x), float64(h),
+			drawLine(img, float64(x), 0, float64(x), float64(rowH),
 				color.RGBA{60, 60, 60, 255})
 		}
-		// label
-		ebitenutil.DebugPrintAt(img, dv.Rows[idx].Name, 4, h/2-4)
+		ebitenutil.DebugPrintAt(img, dv.Rows[idx].Name, 4, rowH/2-4)
 		dv.bgCache[idx] = img
 	}
 }
 
 func (dv *DrumView) recalcButtons() {
-	dv.minusBtn = image.Rect(4, dv.Bounds.Min.Y+4, 32, dv.Bounds.Min.Y+24)
-	dv.plusBtn = image.Rect(36, dv.Bounds.Min.Y+4, 64, dv.Bounds.Min.Y+24)
-	dv.playBtn = image.Rect(dv.Bounds.Min.X+80, dv.Bounds.Min.Y+4, dv.Bounds.Min.X+104, dv.Bounds.Min.Y+24)
-	dv.stopBtn = image.Rect(dv.Bounds.Min.X+110, dv.Bounds.Min.Y+4, dv.Bounds.Min.X+134, dv.Bounds.Min.Y+24)
-	dv.bpmBox = image.Rect(dv.Bounds.Min.X+150, dv.Bounds.Min.Y+4, dv.Bounds.Min.X+210, dv.Bounds.Min.Y+24)
+	top := dv.Bounds.Min.Y + 4
+	dv.minusBtn = image.Rect(4, top, 32, top+20)
+	dv.plusBtn = image.Rect(36, top, 64, top+20)
+	dv.playBtn = image.Rect(80, top, 104, top+20)
+	dv.stopBtn = image.Rect(110, top, 134, top+20)
+	dv.bpmBox = image.Rect(150, top, 210, top+20)
 }
 
-/* ─── drawing ─────────────────────────────────────── */
+/* ─── draw ─────────────────────────────────────────── */
 
 var idM ebiten.GeoM
 
@@ -224,14 +206,6 @@ func (dv *DrumView) Draw(dst *ebiten.Image) {
 	if len(dv.Rows) == 0 {
 		return
 	}
-	// Bounds may have moved (splitter): keep buttons aligned
-	dv.recalcButtons()
-	dv.calcLayout()
-
-	// buttons
-	drawRect(dst, dv.minusBtn, color.White)
-
-	drawRect(dst, dv.plusBtn, color.White)
 
 	// rows
 	for idx, r := range dv.Rows {
@@ -254,30 +228,27 @@ func (dv *DrumView) Draw(dst *ebiten.Image) {
 		}
 	}
 
-	// --- transport & length widgets (draw LAST so nothing hides them) ---
+	// widgets on top
 	drawRect(dst, dv.playBtn, color.White)
-	ebitenutil.DebugPrintAt(dst, "▶",
-		dv.playBtn.Min.X+4, dv.playBtn.Min.Y+2)
+	ebitenutil.DebugPrintAt(dst, "▶", dv.playBtn.Min.X+4, dv.playBtn.Min.Y+2)
 
 	drawRect(dst, dv.stopBtn, color.White)
-	ebitenutil.DebugPrintAt(dst, "■",
-		dv.stopBtn.Min.X+4, dv.stopBtn.Min.Y+2)
+	ebitenutil.DebugPrintAt(dst, "■", dv.stopBtn.Min.X+4, dv.stopBtn.Min.Y+2)
 
 	drawRect(dst, dv.minusBtn, color.White)
-	ebitenutil.DebugPrintAt(dst, "–",
-		dv.minusBtn.Min.X+8, dv.minusBtn.Min.Y+2)
+	ebitenutil.DebugPrintAt(dst, "–", dv.minusBtn.Min.X+8, dv.minusBtn.Min.Y+2)
 
 	drawRect(dst, dv.plusBtn, color.White)
-	ebitenutil.DebugPrintAt(dst, "+",
-		dv.plusBtn.Min.X+8, dv.plusBtn.Min.Y+2)
+	ebitenutil.DebugPrintAt(dst, "+", dv.plusBtn.Min.X+8, dv.plusBtn.Min.Y+2)
 
 	drawRect(dst, dv.bpmBox, color.White)
 	ebitenutil.DebugPrintAt(dst, fmt.Sprintf("%d", dv.bpm),
 		dv.bpmBox.Min.X+4, dv.bpmBox.Min.Y+2)
 }
 
-/* ─── internal drawing utils ─────────────────────── */
-func ptIn(x, y int, r image.Rectangle) bool {
+/* ─── utility ─────────────────────────────────────── */
+
+func pt(x, y int, r image.Rectangle) bool {
 	return x >= r.Min.X && x <= r.Max.X && y >= r.Min.Y && y <= r.Max.Y
 }
 
