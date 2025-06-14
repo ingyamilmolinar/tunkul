@@ -30,9 +30,9 @@ func NewTransport(w int) *Transport {
 }
 
 func (t *Transport) Update() {
-	x, y := ebiten.CursorPosition()
+	x, y := cursorPosition()
 
-	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+	if isMouseButtonPressed(ebiten.MouseButtonLeft) {
 		if t.boxRect.Min.X <= x && x <= t.boxRect.Max.X &&
 			t.boxRect.Min.Y <= y && y <= t.boxRect.Max.Y {
 			t.focusBox = true
@@ -48,7 +48,7 @@ func (t *Transport) Update() {
 	}
 
 	if t.focusBox {
-		if ch := ebiten.InputChars(); len(ch) > 0 {
+		if ch := inputChars(); len(ch) > 0 {
 			// simplistic numeric entry
 			if d, err := strconv.Atoi(string(ch)); err == nil {
 				newBpm := t.BPM*10 + d
@@ -57,7 +57,7 @@ func (t *Transport) Update() {
 				}
 			}
 		}
-		if ebiten.IsKeyPressed(ebiten.KeyBackspace) {
+		if isKeyPressed(ebiten.KeyBackspace) {
 			t.BPM /= 10
 		}
 	}

@@ -153,12 +153,12 @@ func (g *Game) deleteEdge(a, b *uiNode) {
 /* ─────────────── input handling ───────────────────────────────────────── */
 
 func (g *Game) handleEditor() {
-	left := ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft)
-	right := ebiten.IsMouseButtonPressed(ebiten.MouseButtonRight)
-	shift := ebiten.IsKeyPressed(ebiten.KeyShiftLeft) || ebiten.IsKeyPressed(ebiten.KeyShiftRight)
+	left := isMouseButtonPressed(ebiten.MouseButtonLeft)
+	right := isMouseButtonPressed(ebiten.MouseButtonRight)
+	shift := isKeyPressed(ebiten.KeyShiftLeft) || isKeyPressed(ebiten.KeyShiftRight)
 
 	// coords -> world
-	x, y := ebiten.CursorPosition()
+	x, y := cursorPosition()
 	wx := (float64(x) - g.cam.OffsetX) / g.cam.Scale
 	wy := (float64(y-topOffset) - g.cam.OffsetY) / g.cam.Scale
 	if wy > float64(g.split.Y-topOffset) { // ignore bottom pane
@@ -190,8 +190,8 @@ func (g *Game) handleEditor() {
 }
 
 func (g *Game) handleLinkDrag(left, right bool, gx, gy float64, i, j int) {
-	shift := ebiten.IsKeyPressed(ebiten.KeyShiftLeft) ||
-		ebiten.IsKeyPressed(ebiten.KeyShiftRight)
+	shift := isKeyPressed(ebiten.KeyShiftLeft) ||
+		isKeyPressed(ebiten.KeyShiftRight)
 
 		// start drag
 	if left && !g.linkDrag.active && shift {
@@ -231,7 +231,7 @@ func (g *Game) Update() error {
 	g.drum.recalcButtons()
 
 	// camera pan only when not dragging link or splitter
-	shift := ebiten.IsKeyPressed(ebiten.KeyShiftLeft) || ebiten.IsKeyPressed(ebiten.KeyShiftRight)
+	shift := isKeyPressed(ebiten.KeyShiftLeft) || isKeyPressed(ebiten.KeyShiftRight)
 	panOK := !g.linkDrag.active && !g.split.dragging && !shift
 	g.camDragging = g.cam.HandleMouse(panOK)
 

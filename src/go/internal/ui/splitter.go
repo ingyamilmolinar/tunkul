@@ -15,9 +15,9 @@ func NewSplitter(totalH int) *Splitter {
 func (s *Splitter) Update() {
 	const grab = 5 // px hit-box around the divider
 
-	_, y := ebiten.CursorPosition()
+	_, y := cursorPosition()
 
-	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+	if isMouseButtonPressed(ebiten.MouseButtonLeft) {
 		// start drag if cursor is near the divider
 		if !s.dragging && abs(y-s.Y) <= grab {
 			s.dragging = true
@@ -26,7 +26,7 @@ func (s *Splitter) Update() {
 			s.Y = y
 
 			// clamp to sensible range
-			_, screenH := ebiten.ScreenSizeInFullscreen()
+			_, screenH := screenSize()
 			if s.Y < 120 {
 				s.Y = 120
 			}

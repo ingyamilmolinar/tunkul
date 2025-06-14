@@ -16,37 +16,67 @@ func setupDV() *DrumView {
 
 func TestPlayStopButtons(t *testing.T) {
 	dv := setupDV()
-	ebiten.MockCursorX = dv.playBtn.Min.X + 1
-	ebiten.MockCursorY = dv.playBtn.Min.Y + 1
-	ebiten.MousePressed[ebiten.MouseButtonLeft] = true
+	mx := dv.playBtn.Min.X + 1
+	my := dv.playBtn.Min.Y + 1
+	pressed := true
+	restore := SetInputForTest(
+		func() (int, int) { return mx, my },
+		func(b ebiten.MouseButton) bool { return pressed },
+		func(ebiten.Key) bool { return false },
+		func() []rune { return nil },
+		func() (float64, float64) { return 0, 0 },
+		func() (int, int) { return 800, 600 },
+	)
+	defer restore()
+
 	dv.Update()
 	if !dv.playing {
 		t.Fatal("expected playing after clicking play")
 	}
-	ebiten.MockCursorX = dv.stopBtn.Min.X + 1
-	ebiten.MockCursorY = dv.stopBtn.Min.Y + 1
+
+	mx = dv.stopBtn.Min.X + 1
+	my = dv.stopBtn.Min.Y + 1
 	dv.Update()
 	if dv.playing {
 		t.Fatal("expected stopped after clicking stop")
 	}
-	ebiten.MousePressed[ebiten.MouseButtonLeft] = false
+	pressed = false
 }
 
 func TestBPMInput(t *testing.T) {
 	dv := setupDV()
 	dv.bpm = 0
 	dv.focusBPM = true
-	ebiten.Chars = []rune{'9', '0'}
+	chars := []rune{'9', '0'}
+	backspace := false
+	restore := SetInputForTest(
+		func() (int, int) { return 0, 0 },
+		func(ebiten.MouseButton) bool { return false },
+		func(k ebiten.Key) bool {
+			if k == ebiten.KeyBackspace {
+				return backspace
+			}
+			return false
+		},
+		func() []rune {
+			c := chars
+			chars = nil
+			return c
+		},
+		func() (float64, float64) { return 0, 0 },
+		func() (int, int) { return 800, 600 },
+	)
+	defer restore()
+
 	dv.Update()
 	if dv.bpm != 90 {
 		t.Fatalf("expected bpm 90, got %d", dv.bpm)
 	}
-	ebiten.KeysPressed[ebiten.KeyBackspace] = true
+	backspace = true
 	dv.Update()
 	if dv.bpm != 9 {
 		t.Fatalf("expected bpm 9 after backspace, got %d", dv.bpm)
 	}
-	ebiten.KeysPressed[ebiten.KeyBackspace] = false
 }
 
 func TestRowHeightConstant(t *testing.T) {

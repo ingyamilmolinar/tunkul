@@ -69,10 +69,10 @@ func (dv *DrumView) Update() {
 	dv.calcLayout()
 	log.Printf("[drumview] bpm=%d playing=%v cell=%d", dv.bpm, dv.playing, dv.cell)
 
-	mx, my := ebiten.CursorPosition()
+	mx, my := cursorPosition()
 
 	/* ——— widget clicks ——— */
-	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+	if isMouseButtonPressed(ebiten.MouseButtonLeft) {
 		switch {
 		case pt(mx, my, dv.minusBtn):
 			log.Print("[drumview] minus button")
@@ -97,7 +97,7 @@ func (dv *DrumView) Update() {
 	}
 
 	if dv.focusBPM {
-		for _, r := range ebiten.InputChars() {
+		for _, r := range inputChars() {
 			if r >= '0' && r <= '9' {
 				v, _ := strconv.Atoi(string(r))
 				dv.bpm = dv.bpm*10 + v
@@ -107,7 +107,7 @@ func (dv *DrumView) Update() {
 				log.Printf("[drumview] bpm=%d", dv.bpm)
 			}
 		}
-		if ebiten.IsKeyPressed(ebiten.KeyBackspace) {
+		if isKeyPressed(ebiten.KeyBackspace) {
 			dv.bpm /= 10
 			if dv.bpm == 0 {
 				dv.bpm = 1
@@ -127,7 +127,7 @@ func (dv *DrumView) Update() {
 		return
 	}
 
-	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+	if isMouseButtonPressed(ebiten.MouseButtonLeft) {
 		if dv.dragRow == -1 {
 			log.Printf("[drumview] start drag row %d", rowIdx)
 			dv.dragRow = rowIdx

@@ -24,16 +24,20 @@ and OpenGL libraries via `apt`. After running it you can build normally using
 `make all`.
 
 ## Testing
-Unit tests rely on the stubbed Ebiten API. Always run them with the alternate
-module file so the stubs are used:
+Unit tests can run in two modes. Using the stubbed Ebiten API requires the
+alternate module file:
 
 ```sh
 cd src/go
 go test -tags test -modfile=go.test.mod ./...
 ```
 
-Running `go test -tags test ./...` without `-modfile` tries to use the real
-Ebiten library and will fail unless you have a full X11 environment installed.
+If you have a working X11 setup (or run under `xvfb-run`) you can instead test
+against the real Ebiten library:
+
+```sh
+xvfb-run go test ./...
+```
 
 ## Debugging
 The UI and game layers now emit verbose logs describing user interactions and
