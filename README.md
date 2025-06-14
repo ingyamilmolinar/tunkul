@@ -6,6 +6,8 @@ make run-server
 
 ## Build
 make all
+The build will automatically run `go mod download` to fetch dependencies the
+first time, so network access is required on a fresh checkout.
 
 ## Dependencies
 1. `Go` compiler (for building and running tests only)
