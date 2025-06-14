@@ -15,7 +15,7 @@ make all
 Run unit tests with the Ebiten stubs enabled:
 
 ```sh
-go test -tags test ./core/... ./internal/ui
+go test -tags test -modfile=go.test.mod ./core/... ./internal/ui
 ```
 
 Using the real Ebiten library requires an X11 environment with the appropriate dev packages installed; tests without the `test` tag will fail on a headless machine.

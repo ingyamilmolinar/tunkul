@@ -2,17 +2,13 @@ module github.com/ingyamilmolinar/tunkul
 
 go 1.23.4
 
+require github.com/hajimehoshi/ebiten/v2 v2.8.6
+
 require (
-	github.com/hajimehoshi/ebiten/v2 v2.8.6
-	github.com/hajimehoshi/ebiten/v2/ebitenutil v0.0.0-00010101000000-000000000000
+	github.com/ebitengine/gomobile v0.0.0-20240911145611-4856209ac325 // indirect
+	github.com/ebitengine/hideconsole v1.0.0 // indirect
+	github.com/ebitengine/purego v0.8.0 // indirect
+	github.com/jezek/xgb v1.1.1 // indirect
+	golang.org/x/sync v0.8.0 // indirect
+	golang.org/x/sys v0.25.0 // indirect
 )
-
-replace github.com/hajimehoshi/ebiten/v2 => ./internal/ebitestub/ebiten
-
-replace github.com/hajimehoshi/ebiten/v2/ebitenutil => ./internal/ebitestub/ebitenutil
-
-replace golang.org/x/sync => github.com/golang/sync v0.8.0
-
-replace golang.org/x/sys => github.com/golang/sys v0.25.0
-
-replace golang.org/x/image => github.com/golang/image v0.20.0
