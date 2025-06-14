@@ -19,11 +19,11 @@ type DrumRow struct {
 }
 
 type DrumView struct {
-	Rows       []*DrumRow
-	Bounds     image.Rectangle
+	Rows   []*DrumRow
+	Bounds image.Rectangle
 
-	cell       int // px per cell
-	labelW     int
+	cell   int // px per cell
+	labelW int
 
 	// cached bg
 	bgDirty bool
@@ -32,11 +32,11 @@ type DrumView struct {
 	// beat-count buttons
 	minusBtn image.Rectangle
 	plusBtn  image.Rectangle
-	playing bool
-	bpm     int
-	playBtn image.Rectangle
-	stopBtn image.Rectangle
-	bpmBox  image.Rectangle
+	playing  bool
+	bpm      int
+	playBtn  image.Rectangle
+	stopBtn  image.Rectangle
+	bpmBox   image.Rectangle
 	focusBPM bool
 
 	// drag-rotate
@@ -47,15 +47,15 @@ type DrumView struct {
 /* ─── ctor ────────────────────────────────────────── */
 func NewDrumView(b image.Rectangle) *DrumView {
 	v := &DrumView{
-		Bounds: b,
-		labelW: 40,
+		Bounds:  b,
+		labelW:  40,
 		bgDirty: true,
 		dragRow: -1,
-		bpm: 120,
+		bpm:     120,
+		cell:    40,
 	}
 	return v
 }
-
 
 /* ─── interaction ─────────────────────────────────── */
 
@@ -84,20 +84,32 @@ func (dv *DrumView) Update() {
 	}
 
 	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
-		if ptIn(mx,my,dv.playBtn) { dv.playing = true }
-		if ptIn(mx,my,dv.stopBtn) { dv.playing = false }
-		if ptIn(mx,my,dv.bpmBox)  { dv.focusBPM = true } else { dv.focusBPM = false }
+		if ptIn(mx, my, dv.playBtn) {
+			dv.playing = true
+		}
+		if ptIn(mx, my, dv.stopBtn) {
+			dv.playing = false
+		}
+		if ptIn(mx, my, dv.bpmBox) {
+			dv.focusBPM = true
+		} else {
+			dv.focusBPM = false
+		}
 	}
 	if dv.focusBPM {
 		for _, r := range ebiten.InputChars() {
 			if r >= '0' && r <= '9' {
 				dv.bpm = dv.bpm*10 + int(r-'0')
-				if dv.bpm > 300 { dv.bpm = 300 }
+				if dv.bpm > 300 {
+					dv.bpm = 300
+				}
 			}
 		}
 		if ebiten.IsKeyPressed(ebiten.KeyBackspace) {
 			dv.bpm /= 10
-			if dv.bpm == 0 { dv.bpm = 1 }
+			if dv.bpm == 0 {
+				dv.bpm = 1
+			}
 		}
 	}
 
@@ -152,19 +164,14 @@ func (dv *DrumView) resizeSteps(dir int) {
 
 /* ─── cached background & layout ──────────────────── */
 
-// ensures dv.cell never falls below 20 px
+// calcCell ensures a sane default size for a drum row.
 func (dv *DrumView) calcCell() {
-	steps := len(dv.Rows[0].Steps)
-	if steps == 0 { steps = 4 }
-	avail := dv.Bounds.Dx() - dv.labelW
-	dv.cell = avail / steps
-	if dv.cell < 20 {
-		dv.cell = 20
+	if dv.cell == 0 {
+		dv.cell = 40
 	}
 }
 
 func (dv *DrumView) refreshLayout() {
-	// recalc cell *after* Steps changed
 	dv.calcCell()
 	dv.bgDirty = true
 	dv.rebuildBG()
@@ -174,25 +181,7 @@ func (dv *DrumView) refreshLayout() {
 }
 
 func (dv *DrumView) calcLayout() {
-	// step count (never zero)
-	max := len(dv.Rows[0].Steps)
-	if max == 0 {
-		max = 4
-		dv.Rows[0].Steps = make([]bool, max)
-	}
-
-	avail := dv.Bounds.Dx() - dv.labelW
-	if avail <= 0 {
-		avail = 1
-	}
-	newCell := avail / max
-	if newCell < 20 {
-		newCell = 20
-	}
-	if newCell != dv.cell {
-		dv.cell = newCell
-		dv.bgDirty = true
-	}
+	dv.calcCell()
 	if dv.bgDirty {
 		dv.rebuildBG()
 		dv.bgDirty = false
@@ -220,12 +209,11 @@ func (dv *DrumView) rebuildBG() {
 }
 
 func (dv *DrumView) recalcButtons() {
-	dv.minusBtn = image.Rect(4,  dv.Bounds.Min.Y+4,  32, dv.Bounds.Min.Y+24)
-	dv.plusBtn  = image.Rect(36, dv.Bounds.Min.Y+4,  64, dv.Bounds.Min.Y+24)
-	dv.bpm = 120
-	dv.playBtn = image.Rect(dv.Bounds.Min.X+80, dv.Bounds.Min.Y+4,  dv.Bounds.Min.X+104, dv.Bounds.Min.Y+24)
+	dv.minusBtn = image.Rect(4, dv.Bounds.Min.Y+4, 32, dv.Bounds.Min.Y+24)
+	dv.plusBtn = image.Rect(36, dv.Bounds.Min.Y+4, 64, dv.Bounds.Min.Y+24)
+	dv.playBtn = image.Rect(dv.Bounds.Min.X+80, dv.Bounds.Min.Y+4, dv.Bounds.Min.X+104, dv.Bounds.Min.Y+24)
 	dv.stopBtn = image.Rect(dv.Bounds.Min.X+110, dv.Bounds.Min.Y+4, dv.Bounds.Min.X+134, dv.Bounds.Min.Y+24)
-	dv.bpmBox  = image.Rect(dv.Bounds.Min.X+150, dv.Bounds.Min.Y+4, dv.Bounds.Min.X+210, dv.Bounds.Min.Y+24)
+	dv.bpmBox = image.Rect(dv.Bounds.Min.X+150, dv.Bounds.Min.Y+4, dv.Bounds.Min.X+210, dv.Bounds.Min.Y+24)
 }
 
 /* ─── drawing ─────────────────────────────────────── */
@@ -279,11 +267,11 @@ func (dv *DrumView) Draw(dst *ebiten.Image) {
 	ebitenutil.DebugPrintAt(dst, "–",
 		dv.minusBtn.Min.X+8, dv.minusBtn.Min.Y+2)
 
-	drawRect(dst, dv.plusBtn,  color.White)
+	drawRect(dst, dv.plusBtn, color.White)
 	ebitenutil.DebugPrintAt(dst, "+",
 		dv.plusBtn.Min.X+8, dv.plusBtn.Min.Y+2)
 
-	drawRect(dst, dv.bpmBox,  color.White)
+	drawRect(dst, dv.bpmBox, color.White)
 	ebitenutil.DebugPrintAt(dst, fmt.Sprintf("%d", dv.bpm),
 		dv.bpmBox.Min.X+4, dv.bpmBox.Min.Y+2)
 }
@@ -303,4 +291,3 @@ func drawRect(dst *ebiten.Image, r image.Rectangle, col color.Color) {
 	drawLine(dst, float64(r.Max.X), float64(r.Max.Y), float64(r.Min.X), float64(r.Max.Y), col)
 	drawLine(dst, float64(r.Min.X), float64(r.Max.Y), float64(r.Min.X), float64(r.Min.Y), col)
 }
-

@@ -20,10 +20,17 @@ func (i *Image) Size() (int, int)                             { return 0, 0 }
 func (i *Image) ColorModel() color.Model                      { return color.RGBAModel }
 func (i *Image) At(x, y int) color.Color                      { return color.RGBA{} }
 
-func CursorPosition() (int, int)              { return 0, 0 }
-func IsMouseButtonPressed(b MouseButton) bool { return false }
-func IsKeyPressed(k Key) bool                 { return false }
-func InputChars() []rune                      { return nil }
+var (
+	MockCursorX, MockCursorY int
+	MousePressed             = map[MouseButton]bool{}
+	KeysPressed              = map[Key]bool{}
+	Chars                    []rune
+)
+
+func CursorPosition() (int, int)              { return MockCursorX, MockCursorY }
+func IsMouseButtonPressed(b MouseButton) bool { return MousePressed[b] }
+func IsKeyPressed(k Key) bool                 { return KeysPressed[k] }
+func InputChars() []rune                      { c := Chars; Chars = nil; return c }
 func Wheel() (float64, float64)               { return 0, 0 }
 func ScreenSizeInFullscreen() (int, int)      { return 0, 0 }
 
