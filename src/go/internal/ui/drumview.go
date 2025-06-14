@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"log"
 	"strconv"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -66,6 +67,7 @@ func (dv *DrumView) Update() {
 	}
 	dv.recalcButtons()
 	dv.calcLayout()
+	log.Printf("[drumview] bpm=%d playing=%v cell=%d", dv.bpm, dv.playing, dv.cell)
 
 	mx, my := ebiten.CursorPosition()
 
@@ -73,16 +75,21 @@ func (dv *DrumView) Update() {
 	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
 		switch {
 		case pt(mx, my, dv.minusBtn):
+			log.Print("[drumview] minus button")
 			dv.resizeSteps(-1)
 			return
 		case pt(mx, my, dv.plusBtn):
+			log.Print("[drumview] plus button")
 			dv.resizeSteps(+1)
 			return
 		case pt(mx, my, dv.playBtn):
+			log.Print("[drumview] play button")
 			dv.playing = true
 		case pt(mx, my, dv.stopBtn):
+			log.Print("[drumview] stop button")
 			dv.playing = false
 		case pt(mx, my, dv.bpmBox):
+			log.Print("[drumview] bpm box focus")
 			dv.focusBPM = true
 		default:
 			dv.focusBPM = false
@@ -97,6 +104,7 @@ func (dv *DrumView) Update() {
 				if dv.bpm > 300 {
 					dv.bpm = 300
 				}
+				log.Printf("[drumview] bpm=%d", dv.bpm)
 			}
 		}
 		if ebiten.IsKeyPressed(ebiten.KeyBackspace) {
@@ -104,6 +112,7 @@ func (dv *DrumView) Update() {
 			if dv.bpm == 0 {
 				dv.bpm = 1
 			}
+			log.Printf("[drumview] bpm=%d", dv.bpm)
 		}
 	}
 
@@ -120,6 +129,7 @@ func (dv *DrumView) Update() {
 
 	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
 		if dv.dragRow == -1 {
+			log.Printf("[drumview] start drag row %d", rowIdx)
 			dv.dragRow = rowIdx
 			dv.prevMouseX = mx
 		} else if dv.dragRow == rowIdx {
@@ -132,6 +142,7 @@ func (dv *DrumView) Update() {
 					r.Offset += len(r.Steps)
 				}
 				dv.prevMouseX = mx
+				log.Printf("[drumview] row %d offset=%d", rowIdx, r.Offset)
 			}
 		}
 	} else {
@@ -143,6 +154,7 @@ func (dv *DrumView) Update() {
 
 func (dv *DrumView) resizeSteps(dir int) {
 	row := dv.Rows[0]
+	log.Printf("[drumview] resizeSteps dir=%d before=%d", dir, len(row.Steps))
 	switch dir {
 	case -1:
 		if len(row.Steps) > 4 {
@@ -154,6 +166,7 @@ func (dv *DrumView) resizeSteps(dir int) {
 		}
 	}
 	dv.bgDirty = true
+	log.Printf("[drumview] resizeSteps after=%d", len(row.Steps))
 }
 
 func (dv *DrumView) calcLayout() {
@@ -197,6 +210,7 @@ func (dv *DrumView) recalcButtons() {
 	dv.playBtn = image.Rect(80, top, 104, top+20)
 	dv.stopBtn = image.Rect(110, top, 134, top+20)
 	dv.bpmBox = image.Rect(150, top, 210, top+20)
+	log.Printf("[drumview] buttons y=%d", top)
 }
 
 /* ─── draw ─────────────────────────────────────────── */

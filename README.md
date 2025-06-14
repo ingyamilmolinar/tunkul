@@ -34,3 +34,14 @@ go test -tags test -modfile=go.test.mod ./...
 
 Running `go test -tags test ./...` without `-modfile` tries to use the real
 Ebiten library and will fail unless you have a full X11 environment installed.
+
+## Debugging
+The UI and game layers now emit verbose logs describing user interactions and
+internal state changes. Run the game from the repository root and check the
+console output for messages prefixed with `[game]` and `[drumview]`.
+
+### Headless browser tests
+To experiment with UI automation you can attempt to run the WASM build inside a
+headless browser. This requires a Chromium or Firefox binary. In this container
+the packages depend on `snapd` which is not available, so headless tests cannot
+run by default.

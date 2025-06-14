@@ -3,6 +3,7 @@ package ui
 import (
 	"image"
 	"image/color"
+	"log"
 	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -59,6 +60,7 @@ type Game struct {
 
 func New() *Game {
 	g := &Game{cam: NewCamera()}
+	log.Print("[game] init")
 	g.graph = model.NewGraph()
 	g.sched = beat.NewScheduler(g.graph)
 	g.split = NewSplitter(720) // temporary; real height set in Layout
@@ -74,6 +76,7 @@ func (g *Game) Layout(w, h int) (int, int) {
 	// update splitter + drum bounds
 	g.split.Y = h / 2
 	g.drum.Bounds = image.Rect(0, g.split.Y, w, h)
+	log.Printf("[game] layout %dx%d", w, h)
 	return w, h
 }
 
@@ -166,6 +169,7 @@ func (g *Game) handleEditor() {
 	// ---------------- delete node (right-click) ----------------
 	if right && !shift && !left {
 		if n := g.nodeAt(i, j); n != nil {
+			log.Printf("[game] delete node %d,%d", i, j)
 			g.deleteNode(n)
 		}
 		return
@@ -180,6 +184,7 @@ func (g *Game) handleEditor() {
 	// ---------------- plain left-click → add/select node ---------
 	if left && !shift && !right && !g.linkDrag.active && !g.camDragging {
 		n := g.tryAddNode(i, j)
+		log.Printf("[game] add/select node %d,%d", i, j)
 		g.sel = n
 	}
 }
@@ -188,9 +193,10 @@ func (g *Game) handleLinkDrag(left, right bool, gx, gy float64, i, j int) {
 	shift := ebiten.IsKeyPressed(ebiten.KeyShiftLeft) ||
 		ebiten.IsKeyPressed(ebiten.KeyShiftRight)
 
-	// start drag
+		// start drag
 	if left && !g.linkDrag.active && shift {
 		if n := g.nodeAt(i, j); n != nil {
+			log.Printf("[game] start link drag from %d,%d", n.I, n.J)
 			g.linkDrag = dragLink{from: n, active: true}
 		}
 	}
@@ -203,11 +209,14 @@ func (g *Game) handleLinkDrag(left, right bool, gx, gy float64, i, j int) {
 	if g.linkDrag.active && !left {
 		if n2 := g.nodeAt(i, j); n2 != nil && n2 != g.linkDrag.from {
 			if right {
+				log.Printf("[game] delete edge %d,%d -> %d,%d", g.linkDrag.from.I, g.linkDrag.from.J, n2.I, n2.J)
 				g.deleteEdge(g.linkDrag.from, n2)
 			} else {
+				log.Printf("[game] add edge %d,%d -> %d,%d", g.linkDrag.from.I, g.linkDrag.from.J, n2.I, n2.J)
 				g.addEdge(g.linkDrag.from, n2)
 			}
 		}
+		log.Print("[game] end link drag")
 		g.linkDrag = dragLink{}
 	}
 }
@@ -246,6 +255,7 @@ func (g *Game) Update() error {
 	g.drum.Update()
 	if g.drum.playing {
 		g.sched.BPM = g.drum.bpm
+		log.Printf("[game] tick bpm=%d", g.sched.BPM)
 		g.sched.Tick()
 	}
 	return nil
@@ -357,6 +367,7 @@ func (g *Game) spawnPulseFrom(n *uiNode, beats int) {
 				x1: e.A.X, y1: e.A.Y, x2: e.B.X, y2: e.B.Y,
 				speed: speed,
 			})
+			log.Printf("[game] spawn pulse %d,%d -> %d,%d", e.A.I, e.A.J, e.B.I, e.B.J)
 		}
 	}
 }
