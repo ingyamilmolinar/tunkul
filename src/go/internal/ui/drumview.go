@@ -22,8 +22,6 @@ type DrumRow struct {
 
 /* ───────────────────────────────────────────────────────────── */
 
-const rowHeight = 40
-
 type DrumView struct {
 	Rows   []*DrumRow
 	Bounds image.Rectangle
@@ -48,6 +46,13 @@ type DrumView struct {
 	// drag-rotate
 	dragRow    int
 	prevMouseX int
+}
+
+func (dv *DrumView) rowHeight() int {
+	if len(dv.Rows) == 0 {
+		return 0
+	}
+	return dv.Bounds.Dy() / len(dv.Rows)
 }
 
 /* ─── ctor ────────────────────────────────────────── */
@@ -123,7 +128,7 @@ func (dv *DrumView) Update() {
 		dv.dragRow = -1
 		return
 	}
-	rowIdx := (my - dv.Bounds.Min.Y) / rowHeight
+	rowIdx := (my - dv.Bounds.Min.Y) / dv.rowHeight()
 	if rowIdx < 0 || rowIdx >= len(dv.Rows) {
 		dv.dragRow = -1
 		return
@@ -190,7 +195,7 @@ func (dv *DrumView) calcLayout() {
 func (dv *DrumView) rebuildBG() {
 	dv.bgCache = make([]*ebiten.Image, len(dv.Rows))
 	for idx := range dv.Rows {
-		rowH := rowHeight
+		rowH := dv.rowHeight()
 		img := ebiten.NewImage(dv.Bounds.Dx(), rowH)
 		img.Fill(color.RGBA{30, 30, 30, 255})
 
@@ -225,8 +230,9 @@ func (dv *DrumView) Draw(dst *ebiten.Image) {
 	}
 
 	// rows
+	rowH := dv.rowHeight()
 	for idx, r := range dv.Rows {
-		y := dv.Bounds.Min.Y + idx*rowHeight
+		y := dv.Bounds.Min.Y + idx*rowH
 
 		op := &ebiten.DrawImageOptions{}
 		op.GeoM.Translate(float64(dv.Bounds.Min.X), float64(y))
@@ -237,7 +243,7 @@ func (dv *DrumView) Draw(dst *ebiten.Image) {
 				continue
 			}
 			x := dv.Bounds.Min.X + dv.labelW + i*dv.cell
-			scale := float64(rowHeight-4) / float64(NodeAnim.Bounds().Dx())
+			scale := float64(rowH-4) / float64(NodeAnim.Bounds().Dx())
 			op := &ebiten.DrawImageOptions{}
 			op.GeoM.Scale(scale, scale)
 			op.GeoM.Translate(float64(x+2), float64(y+2))

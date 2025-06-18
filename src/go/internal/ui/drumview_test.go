@@ -9,7 +9,7 @@ import (
 
 func setupDV() *DrumView {
 	dv := NewDrumView(image.Rect(0, 0, 200, 100))
-	dv.Rows = []*DrumRow{{Name: "H", Steps: make([]bool, 4)}}
+	dv.Rows = []*DrumRow{{Name: "H", Steps: make([]bool, 4)}, {Name: "S", Steps: make([]bool, 4)}}
 	dv.recalcButtons()
 	return dv
 }
@@ -87,6 +87,16 @@ func TestRowHeightConstant(t *testing.T) {
 	dv.Update()
 	if dv.bgCache[0].Bounds().Dy() != initial {
 		t.Fatalf("row height changed from %d to %d", initial, dv.bgCache[0].Bounds().Dy())
+	}
+}
+
+func TestRowHeightSplit(t *testing.T) {
+	dv := setupDV()
+	dv.Update()
+	h := dv.rowHeight()
+	expected := dv.Bounds.Dy() / len(dv.Rows)
+	if h != expected {
+		t.Fatalf("expected row height %d, got %d", expected, h)
 	}
 }
 
