@@ -245,14 +245,25 @@ func TestDragMaintainsAlignment(t *testing.T) {
 	step := StepPixels(g.cam.Scale)
 	offX := math.Round(g.cam.OffsetX)
 	offY := math.Round(g.cam.OffsetY)
-	sx := offX + float64(step*n.I)
-	sy := offY + float64(step*n.J)
+	nodeX := offX + float64(step*n.I)
+	nodeY := offY + float64(step*n.J)
 
-	camScale := float64(step) / float64(GridStep)
-	ex := float64(n.I*GridStep)*camScale + offX
-	ey := float64(n.J*GridStep)*camScale + offY
-	if sx != ex || sy != ey {
-		t.Fatalf("node misaligned after drag: (%v,%v) vs (%v,%v)", sx, sy, ex, ey)
+	xs, ys := GridLines(g.cam, g.winW, g.split.Y)
+	foundX, foundY := false, false
+	for _, x := range xs {
+		if math.Abs(x-nodeX) < 1e-3 {
+			foundX = true
+			break
+		}
+	}
+	for _, y := range ys {
+		if math.Abs(y-nodeY) < 1e-3 {
+			foundY = true
+			break
+		}
+	}
+	if !foundX || !foundY {
+		t.Fatalf("node not aligned with grid after drag")
 	}
 }
 func TestInitialDrumRows(t *testing.T) {

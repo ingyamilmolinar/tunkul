@@ -281,30 +281,32 @@ func (g *Game) Draw(screen *ebiten.Image) {
 }
 
 func (g *Game) drawGridPane(screen *ebiten.Image) {
-	// camera matrix for nodes/pulses (shift down by bar height)
+	// camera matrix for world drawings (shift down by bar height)
 	stepPx := StepPixels(g.cam.Scale)
-	offX := int(math.Round(g.cam.OffsetX))
-	offY := int(math.Round(g.cam.OffsetY))
+	offX := math.Round(g.cam.OffsetX)
+	offY := math.Round(g.cam.OffsetY)
 	camScale := float64(stepPx) / float64(GridStep)
 	var cam ebiten.GeoM
 	cam.Scale(camScale, camScale)
-	cam.Translate(float64(offX), float64(offY+topOffset))
+	cam.Translate(offX, offY+float64(topOffset))
 
 	frame := (g.frame / 6) % len(NodeFrames)
 
-	// grid lattice in screen coordinates to avoid sub-pixel jitter
-
-	startX := -((offX) % stepPx)
-	startY := -((offY) % stepPx)
+	// grid lattice computed in world coordinates then transformed
+	minX, maxX, minY, maxY := visibleWorldRect(g.cam, g.winW, g.split.Y)
+	startI := int(math.Floor(minX / GridStep))
+	endI := int(math.Ceil(maxX / GridStep))
+	startJ := int(math.Floor(minY / GridStep))
+	endJ := int(math.Ceil(maxY / GridStep))
 
 	var id ebiten.GeoM
-	for x := startX; x <= g.winW; x += stepPx {
-		DrawLineCam(screen, float64(x), float64(topOffset), float64(x), float64(g.split.Y),
-			&id, color.RGBA{40, 40, 40, 255}, 1)
+	for i := startI; i <= endI; i++ {
+		x := float64(i * GridStep)
+		DrawLineCam(screen, x, minY, x, maxY, &cam, color.RGBA{40, 40, 40, 255}, 1)
 	}
-	for y := topOffset + startY; y <= g.split.Y; y += stepPx {
-		DrawLineCam(screen, 0, float64(y), float64(g.winW), float64(y),
-			&id, color.RGBA{40, 40, 40, 255}, 1)
+	for j := startJ; j <= endJ; j++ {
+		y := float64(j * GridStep)
+		DrawLineCam(screen, minX, y, maxX, y, &cam, color.RGBA{40, 40, 40, 255}, 1)
 	}
 
 	// edges
@@ -322,27 +324,29 @@ func (g *Game) drawGridPane(screen *ebiten.Image) {
 
 	// nodes
 	for _, n := range g.nodes {
-		sx := float64(offX + stepPx*n.I)
-		sy := float64(offY + stepPx*n.J)
 		op := &ebiten.DrawImageOptions{}
-		op.GeoM.Scale(g.cam.Scale, g.cam.Scale)
-		op.GeoM.Translate(sx-16*g.cam.Scale, sy-16*g.cam.Scale+float64(topOffset))
+		op.GeoM.Scale(camScale, camScale)
+		op.GeoM.Translate(n.X, n.Y)
+		op.GeoM.Concat(cam)
+		size := float64(NodeSpriteSize) * camScale
+		op.GeoM.Translate(-size/2, -size/2)
 		screen.DrawImage(NodeFrames[frame], op)
 	}
 
 	// selected highlight
 	if g.sel != nil {
-		stepPx := StepPixels(g.cam.Scale)
-		offX := int(math.Round(g.cam.OffsetX))
-		offY := int(math.Round(g.cam.OffsetY))
-		sx := float64(offX + stepPx*g.sel.I)
-		sy := float64(offY + stepPx*g.sel.J)
-		size := float64(NodeSpriteSize) * g.cam.Scale
+		sx := float64(g.sel.I * GridStep)
+		sy := float64(g.sel.J * GridStep)
+		sx = sx*camScale + offX
+		sy = sy*camScale + offY
+		size := float64(NodeSpriteSize) * camScale
 		half := size / 2
 		x1 := sx - half
-		y1 := sy - half + float64(topOffset)
+		y1 := sy - half
 		x2 := sx + half
-		y2 := sy + half + float64(topOffset)
+		y2 := sy + half
+		y1 += float64(topOffset)
+		y2 += float64(topOffset)
 		var id ebiten.GeoM
 		DrawLineCam(screen, x1, y1, x2, y1, &id, color.RGBA{255, 0, 0, 255}, 2)
 		DrawLineCam(screen, x2, y1, x2, y2, &id, color.RGBA{255, 0, 0, 255}, 2)
