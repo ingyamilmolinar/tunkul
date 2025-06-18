@@ -11,6 +11,14 @@ type Camera struct {
 
 func NewCamera() *Camera { return &Camera{Scale: 2.0} }
 
+// ScreenPos converts world coordinates to screen-space using the current
+// camera transform.
+func (c *Camera) ScreenPos(x, y float64) (sx, sy float64) {
+	sx = x*c.Scale + c.OffsetX
+	sy = y*c.Scale + c.OffsetY
+	return
+}
+
 // GeoM returns the affine transform applied to all world-space drawings.
 func (c *Camera) GeoM() ebiten.GeoM {
 	var m ebiten.GeoM

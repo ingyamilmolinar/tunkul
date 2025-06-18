@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -168,5 +169,27 @@ func TestPulseAnimationProgress(t *testing.T) {
 	g.Update() // advance animation
 	if g.pulses[0].t <= first {
 		t.Fatalf("pulse did not advance: %f <= %f", g.pulses[0].t, first)
+	}
+}
+
+func TestNodeScreenAlignment(t *testing.T) {
+	g := New()
+	g.Layout(640, 480)
+	g.cam.Scale = 1.37
+	g.cam.OffsetX = 12.3
+	g.cam.OffsetY = 7.8
+
+	n := g.tryAddNode(3, 2)
+	step := StepPixels(g.cam.Scale)
+	offX := math.Round(g.cam.OffsetX)
+	offY := math.Round(g.cam.OffsetY)
+	sx := offX + float64(step*n.I)
+	sy := offY + float64(step*n.J)
+
+	expX := sx
+	expY := sy
+
+	if sx != expX || sy != expY {
+		t.Fatalf("screen (%v,%v) want (%v,%v)", sx, sy, expX, expY)
 	}
 }

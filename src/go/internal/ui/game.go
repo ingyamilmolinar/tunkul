@@ -269,29 +269,29 @@ func (g *Game) Draw(screen *ebiten.Image) {
 }
 
 func (g *Game) drawGridPane(screen *ebiten.Image) {
-        // camera matrix for nodes/pulses (shift down by bar height)
-        cam := g.cam.GeoM()
-        cam.Translate(0, float64(topOffset))
+	// camera matrix for nodes/pulses (shift down by bar height)
+	cam := g.cam.GeoM()
+	cam.Translate(0, float64(topOffset))
 
-        frame := (g.frame / 6) % len(NodeFrames)
+	frame := (g.frame / 6) % len(NodeFrames)
 
-        // grid lattice in screen coordinates to avoid sub-pixel jitter
-        stepPx := StepPixels(g.cam.Scale)
-        offX := int(math.Round(g.cam.OffsetX))
-        offY := int(math.Round(g.cam.OffsetY))
+	// grid lattice in screen coordinates to avoid sub-pixel jitter
+	stepPx := StepPixels(g.cam.Scale)
+	offX := int(math.Round(g.cam.OffsetX))
+	offY := int(math.Round(g.cam.OffsetY))
 
-        startX := -((offX) % stepPx)
-        startY := -((offY) % stepPx)
+	startX := -((offX) % stepPx)
+	startY := -((offY) % stepPx)
 
-        var id ebiten.GeoM
-        for x := startX; x <= g.winW; x += stepPx {
-                DrawLineCam(screen, float64(x), float64(topOffset), float64(x), float64(g.split.Y),
-                        &id, color.RGBA{40, 40, 40, 255}, 1)
-        }
-        for y := topOffset + startY; y <= g.split.Y; y += stepPx {
-                DrawLineCam(screen, 0, float64(y), float64(g.winW), float64(y),
-                        &id, color.RGBA{40, 40, 40, 255}, 1)
-        }
+	var id ebiten.GeoM
+	for x := startX; x <= g.winW; x += stepPx {
+		DrawLineCam(screen, float64(x), float64(topOffset), float64(x), float64(g.split.Y),
+			&id, color.RGBA{40, 40, 40, 255}, 1)
+	}
+	for y := topOffset + startY; y <= g.split.Y; y += stepPx {
+		DrawLineCam(screen, 0, float64(y), float64(g.winW), float64(y),
+			&id, color.RGBA{40, 40, 40, 255}, 1)
+	}
 
 	// edges
 	for _, e := range g.edges {
@@ -308,9 +308,11 @@ func (g *Game) drawGridPane(screen *ebiten.Image) {
 
 	// nodes
 	for _, n := range g.nodes {
+		sx := float64(offX + stepPx*n.I)
+		sy := float64(offY + stepPx*n.J)
 		op := &ebiten.DrawImageOptions{}
-		op.GeoM.Translate(n.X-16, n.Y-16)
-		op.GeoM.Concat(cam)
+		op.GeoM.Scale(g.cam.Scale, g.cam.Scale)
+		op.GeoM.Translate(sx-16*g.cam.Scale, sy-16*g.cam.Scale+float64(topOffset))
 		screen.DrawImage(NodeFrames[frame], op)
 	}
 
@@ -333,10 +335,10 @@ func (g *Game) drawGridPane(screen *ebiten.Image) {
 	}
 
 	// splitter line
-        DrawLineCam(screen,
-                0, float64(g.split.Y),
-                float64(g.winW), float64(g.split.Y),
-                &id, color.RGBA{90, 90, 90, 255}, 2)
+	DrawLineCam(screen,
+		0, float64(g.split.Y),
+		float64(g.winW), float64(g.split.Y),
+		&id, color.RGBA{90, 90, 90, 255}, 2)
 }
 func (g *Game) drawDrumPane(dst *ebiten.Image) {
 	g.drum.Draw(dst)
