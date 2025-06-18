@@ -1,6 +1,10 @@
 package ui
 
-import "github.com/hajimehoshi/ebiten/v2"
+import (
+	"math"
+
+	"github.com/hajimehoshi/ebiten/v2"
+)
 
 // Camera owns zoom & pan parameters and exposes a GeoM matrix.
 type Camera struct {
@@ -24,6 +28,16 @@ func (c *Camera) GeoM() ebiten.GeoM {
 	var m ebiten.GeoM
 	m.Scale(c.Scale, c.Scale)
 	m.Translate(c.OffsetX, c.OffsetY)
+	return m
+}
+
+// GeoMRounded returns a matrix like GeoM but rounds the translation
+// to integer pixels. This keeps grid lines and nodes aligned when
+// the camera moves with fractional offsets.
+func (c *Camera) GeoMRounded() ebiten.GeoM {
+	var m ebiten.GeoM
+	m.Scale(c.Scale, c.Scale)
+	m.Translate(math.Round(c.OffsetX), math.Round(c.OffsetY))
 	return m
 }
 

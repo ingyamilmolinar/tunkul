@@ -216,6 +216,45 @@ func TestNodeScreenAlignment(t *testing.T) {
 		t.Fatalf("screen (%v,%v) want (%v,%v)", sx, sy, expX, expY)
 	}
 }
+
+func TestDragMaintainsAlignment(t *testing.T) {
+	g := New()
+	g.Layout(640, 480)
+	g.cam.Scale = 1.37
+	n := g.tryAddNode(2, 1)
+
+	pos := []struct{ x, y int }{{100, topOffset + 100}, {120, topOffset + 110}}
+	idx := 0
+	pressed := true
+	restore := SetInputForTest(
+		func() (int, int) { return pos[idx].x, pos[idx].y },
+		func(b ebiten.MouseButton) bool { return pressed && b == ebiten.MouseButtonLeft },
+		func(ebiten.Key) bool { return false },
+		func() []rune { return nil },
+		func() (float64, float64) { return 0, 0 },
+		func() (int, int) { return 640, 480 },
+	)
+	defer restore()
+
+	g.Update() // press
+	idx = 1
+	g.Update() // drag
+	pressed = false
+	g.Update() // release
+
+	step := StepPixels(g.cam.Scale)
+	offX := math.Round(g.cam.OffsetX)
+	offY := math.Round(g.cam.OffsetY)
+	sx := offX + float64(step*n.I)
+	sy := offY + float64(step*n.J)
+
+	camScale := float64(step) / float64(GridStep)
+	ex := float64(n.I*GridStep)*camScale + offX
+	ey := float64(n.J*GridStep)*camScale + offY
+	if sx != ex || sy != ey {
+		t.Fatalf("node misaligned after drag: (%v,%v) vs (%v,%v)", sx, sy, ex, ey)
+	}
+}
 func TestInitialDrumRows(t *testing.T) {
 	g := New()
 	if len(g.drum.Rows) != 2 {

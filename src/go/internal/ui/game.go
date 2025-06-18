@@ -282,15 +282,17 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 func (g *Game) drawGridPane(screen *ebiten.Image) {
 	// camera matrix for nodes/pulses (shift down by bar height)
-	cam := g.cam.GeoM()
-	cam.Translate(0, float64(topOffset))
+	stepPx := StepPixels(g.cam.Scale)
+	offX := int(math.Round(g.cam.OffsetX))
+	offY := int(math.Round(g.cam.OffsetY))
+	camScale := float64(stepPx) / float64(GridStep)
+	var cam ebiten.GeoM
+	cam.Scale(camScale, camScale)
+	cam.Translate(float64(offX), float64(offY+topOffset))
 
 	frame := (g.frame / 6) % len(NodeFrames)
 
 	// grid lattice in screen coordinates to avoid sub-pixel jitter
-	stepPx := StepPixels(g.cam.Scale)
-	offX := int(math.Round(g.cam.OffsetX))
-	offY := int(math.Round(g.cam.OffsetY))
 
 	startX := -((offX) % stepPx)
 	startY := -((offY) % stepPx)
