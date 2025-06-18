@@ -66,6 +66,15 @@ func NewDrumView(b image.Rectangle) *DrumView {
 	}
 }
 
+// SetBounds updates the view rectangle and marks the background cache
+// as dirty so the next Update rebuilds it with the new dimensions.
+func (dv *DrumView) SetBounds(b image.Rectangle) {
+	if dv.Bounds != b {
+		dv.Bounds = b
+		dv.bgDirty = true
+	}
+}
+
 /* ─── public update ───────────────────────────────── */
 
 func (dv *DrumView) Update() {

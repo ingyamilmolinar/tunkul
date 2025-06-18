@@ -41,6 +41,22 @@ against the real Ebiten library:
 xvfb-run go test ./...
 ```
 
+### UI functional tests
+
+Tests under `internal/ui` simulate input events to validate button behaviour and
+layout calculations. Run them using the stubbed Ebiten module:
+
+```sh
+go test -tags test -modfile=go.test.mod ./internal/ui
+```
+
+To run the same tests with the real Ebiten backend you need an X11 display (or
+`xvfb`). Execute:
+
+```sh
+xvfb-run go test ./internal/ui
+```
+
 ## Debugging
 The UI and game layers now emit verbose logs describing user interactions and
 internal state changes. Run the game from the repository root and check the

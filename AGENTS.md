@@ -39,4 +39,6 @@ Code structure:
 - `core/beat` – beat scheduler (integration tested)
 - `internal/ui` – controller and renderer using Ebiten. Input helpers can be
   swapped during tests with `SetInputForTest` so UI logic can run headlessly.
+  UI functional tests live in this package and verify button behaviour and
+  layout sizing.
 

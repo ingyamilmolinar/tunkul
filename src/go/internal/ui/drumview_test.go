@@ -111,3 +111,15 @@ func TestDrawAfterInit(t *testing.T) {
 	}()
 	dv.Draw(img)
 }
+
+func TestSetBoundsRebuilds(t *testing.T) {
+	dv := setupDV()
+	dv.Update()
+	h1 := dv.rowHeight()
+	dv.SetBounds(image.Rect(0, 0, 200, 150))
+	dv.Update()
+	h2 := dv.rowHeight()
+	if h2 <= h1 {
+		t.Fatalf("expected height to increase from %d to %d", h1, h2)
+	}
+}

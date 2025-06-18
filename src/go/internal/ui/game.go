@@ -80,7 +80,7 @@ func (g *Game) Layout(w, h int) (int, int) {
 	g.winW, g.winH = w, h
 	// update splitter + drum bounds
 	g.split.Y = h / 2
-	g.drum.Bounds = image.Rect(0, g.split.Y, w, h)
+	g.drum.SetBounds(image.Rect(0, g.split.Y, w, h))
 	log.Printf("[game] layout %dx%d", w, h)
 	return w, h
 }
@@ -239,8 +239,7 @@ func (g *Game) handleLinkDrag(left, right bool, gx, gy float64, i, j int) {
 func (g *Game) Update() error {
 	// splitter
 	g.split.Update()
-	g.drum.Bounds.Min.Y = g.split.Y
-	g.drum.Bounds.Max.Y = g.winH
+	g.drum.SetBounds(image.Rect(0, g.split.Y, g.winW, g.winH))
 	g.drum.recalcButtons()
 
 	// camera pan only when not dragging link or splitter
