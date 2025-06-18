@@ -22,6 +22,8 @@ type DrumRow struct {
 
 /* ───────────────────────────────────────────────────────────── */
 
+const rowHeight = 40
+
 type DrumView struct {
 	Rows   []*DrumRow
 	Bounds image.Rectangle
@@ -121,7 +123,7 @@ func (dv *DrumView) Update() {
 		dv.dragRow = -1
 		return
 	}
-	rowIdx := (my - dv.Bounds.Min.Y) / dv.cell
+	rowIdx := (my - dv.Bounds.Min.Y) / rowHeight
 	if rowIdx < 0 || rowIdx >= len(dv.Rows) {
 		dv.dragRow = -1
 		return
@@ -188,7 +190,7 @@ func (dv *DrumView) calcLayout() {
 func (dv *DrumView) rebuildBG() {
 	dv.bgCache = make([]*ebiten.Image, len(dv.Rows))
 	for idx := range dv.Rows {
-		rowH := dv.cell
+		rowH := rowHeight
 		img := ebiten.NewImage(dv.Bounds.Dx(), rowH)
 		img.Fill(color.RGBA{30, 30, 30, 255})
 
@@ -224,7 +226,7 @@ func (dv *DrumView) Draw(dst *ebiten.Image) {
 
 	// rows
 	for idx, r := range dv.Rows {
-		y := dv.Bounds.Min.Y + idx*dv.cell
+		y := dv.Bounds.Min.Y + idx*rowHeight
 
 		op := &ebiten.DrawImageOptions{}
 		op.GeoM.Translate(float64(dv.Bounds.Min.X), float64(y))
@@ -235,7 +237,7 @@ func (dv *DrumView) Draw(dst *ebiten.Image) {
 				continue
 			}
 			x := dv.Bounds.Min.X + dv.labelW + i*dv.cell
-			scale := float64(dv.cell-4) / float64(NodeAnim.Bounds().Dx())
+			scale := float64(rowHeight-4) / float64(NodeAnim.Bounds().Dx())
 			op := &ebiten.DrawImageOptions{}
 			op.GeoM.Scale(scale, scale)
 			op.GeoM.Translate(float64(x+2), float64(y+2))
@@ -245,13 +247,13 @@ func (dv *DrumView) Draw(dst *ebiten.Image) {
 
 	// widgets on top
 	drawRect(dst, dv.playBtn, color.White)
-	ebitenutil.DebugPrintAt(dst, "▶", dv.playBtn.Min.X+4, dv.playBtn.Min.Y+2)
+	ebitenutil.DebugPrintAt(dst, ">", dv.playBtn.Min.X+4, dv.playBtn.Min.Y+2)
 
 	drawRect(dst, dv.stopBtn, color.White)
-	ebitenutil.DebugPrintAt(dst, "■", dv.stopBtn.Min.X+4, dv.stopBtn.Min.Y+2)
+	ebitenutil.DebugPrintAt(dst, "X", dv.stopBtn.Min.X+4, dv.stopBtn.Min.Y+2)
 
 	drawRect(dst, dv.minusBtn, color.White)
-	ebitenutil.DebugPrintAt(dst, "–", dv.minusBtn.Min.X+8, dv.minusBtn.Min.Y+2)
+	ebitenutil.DebugPrintAt(dst, "-", dv.minusBtn.Min.X+8, dv.minusBtn.Min.Y+2)
 
 	drawRect(dst, dv.plusBtn, color.White)
 	ebitenutil.DebugPrintAt(dst, "+", dv.plusBtn.Min.X+8, dv.plusBtn.Min.Y+2)

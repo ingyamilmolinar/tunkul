@@ -273,11 +273,10 @@ func (g *Game) drawGridPane(screen *ebiten.Image) {
 	cam := g.cam.GeoM()
 	cam.Translate(0, float64(topOffset))
 
-	topH := g.split.Y - topOffset
 	frame := (g.frame / 6) % len(NodeFrames)
 
 	// grid lattice covers full visible area regardless of zoom/pan
-	minX, maxX, minY, maxY := visibleWorldRect(g.cam, g.winW, topH)
+	minX, maxX, minY, maxY := visibleWorldRect(g.cam, g.winW, g.split.Y)
 	startX := int(math.Floor(minX/float64(GridStep))) * GridStep
 	endX := int(math.Ceil(maxX/float64(GridStep))) * GridStep
 	startY := int(math.Floor(minY/float64(GridStep))) * GridStep

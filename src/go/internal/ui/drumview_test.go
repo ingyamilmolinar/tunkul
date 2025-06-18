@@ -81,10 +81,12 @@ func TestBPMInput(t *testing.T) {
 
 func TestRowHeightConstant(t *testing.T) {
 	dv := setupDV()
-	initial := dv.cell
+	dv.Update()
+	initial := dv.bgCache[0].Bounds().Dy()
 	dv.resizeSteps(+1)
-	if dv.cell != initial {
-		t.Fatalf("cell changed from %d to %d", initial, dv.cell)
+	dv.Update()
+	if dv.bgCache[0].Bounds().Dy() != initial {
+		t.Fatalf("row height changed from %d to %d", initial, dv.bgCache[0].Bounds().Dy())
 	}
 }
 
