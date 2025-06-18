@@ -269,27 +269,29 @@ func (g *Game) Draw(screen *ebiten.Image) {
 }
 
 func (g *Game) drawGridPane(screen *ebiten.Image) {
-	// camera matrix (shift down by bar height)
-	cam := g.cam.GeoM()
-	cam.Translate(0, float64(topOffset))
+        // camera matrix for nodes/pulses (shift down by bar height)
+        cam := g.cam.GeoM()
+        cam.Translate(0, float64(topOffset))
 
-	frame := (g.frame / 6) % len(NodeFrames)
+        frame := (g.frame / 6) % len(NodeFrames)
 
-	// grid lattice covers full visible area regardless of zoom/pan
-	minX, maxX, minY, maxY := visibleWorldRect(g.cam, g.winW, g.split.Y)
-	startX := int(math.Floor(minX/float64(GridStep))) * GridStep
-	endX := int(math.Ceil(maxX/float64(GridStep))) * GridStep
-	startY := int(math.Floor(minY/float64(GridStep))) * GridStep
-	endY := int(math.Ceil(maxY/float64(GridStep))) * GridStep
+        // grid lattice in screen coordinates to avoid sub-pixel jitter
+        stepPx := StepPixels(g.cam.Scale)
+        offX := int(math.Round(g.cam.OffsetX))
+        offY := int(math.Round(g.cam.OffsetY))
 
-	for x := startX; x <= endX; x += GridStep {
-		DrawLineCam(screen, float64(x), float64(startY), float64(x), float64(endY),
-			&cam, color.RGBA{40, 40, 40, 255}, 1)
-	}
-	for y := startY; y <= endY; y += GridStep {
-		DrawLineCam(screen, float64(startX), float64(y), float64(endX), float64(y),
-			&cam, color.RGBA{40, 40, 40, 255}, 1)
-	}
+        startX := -((offX) % stepPx)
+        startY := -((offY) % stepPx)
+
+        var id ebiten.GeoM
+        for x := startX; x <= g.winW; x += stepPx {
+                DrawLineCam(screen, float64(x), float64(topOffset), float64(x), float64(g.split.Y),
+                        &id, color.RGBA{40, 40, 40, 255}, 1)
+        }
+        for y := topOffset + startY; y <= g.split.Y; y += stepPx {
+                DrawLineCam(screen, 0, float64(y), float64(g.winW), float64(y),
+                        &id, color.RGBA{40, 40, 40, 255}, 1)
+        }
 
 	// edges
 	for _, e := range g.edges {
@@ -331,11 +333,10 @@ func (g *Game) drawGridPane(screen *ebiten.Image) {
 	}
 
 	// splitter line
-	var id ebiten.GeoM // identity matrix
-	DrawLineCam(screen,
-		0, float64(g.split.Y),
-		float64(g.winW), float64(g.split.Y),
-		&id, color.RGBA{90, 90, 90, 255}, 2)
+        DrawLineCam(screen,
+                0, float64(g.split.Y),
+                float64(g.winW), float64(g.split.Y),
+                &id, color.RGBA{90, 90, 90, 255}, 2)
 }
 func (g *Game) drawDrumPane(dst *ebiten.Image) {
 	g.drum.Draw(dst)

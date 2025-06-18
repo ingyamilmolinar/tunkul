@@ -37,5 +37,6 @@ Key technologies:
 Code structure:
 - `core/model` – pure graph and drum row logic (unit tested)
 - `core/beat` – beat scheduler (integration tested)
-- `internal/ui` – controller and renderer using Ebiten
+- `internal/ui` – controller and renderer using Ebiten. Input helpers can be
+  swapped during tests with `SetInputForTest` so UI logic can run headlessly.
 
