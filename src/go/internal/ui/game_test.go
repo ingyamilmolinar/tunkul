@@ -277,3 +277,22 @@ func TestInitialDrumRows(t *testing.T) {
 		t.Fatalf("bgCache=%d want 2", len(g.drum.bgCache))
 	}
 }
+
+func TestHighlightScalesWithZoom(t *testing.T) {
+	g := New()
+	g.Layout(640, 480)
+	n := g.tryAddNode(1, 1)
+	g.sel = n
+
+	g.cam.Scale = 1.0
+	a1, _, a2, _ := g.nodeScreenRect(n)
+	w1 := a2 - a1
+
+	g.cam.Scale = 2.0
+	b1, _, b2, _ := g.nodeScreenRect(n)
+	w2 := b2 - b1
+
+	if math.Abs(w2-2*w1) > 1e-3 {
+		t.Fatalf("highlight width did not scale: w1=%f w2=%f", w1, w2)
+	}
+}

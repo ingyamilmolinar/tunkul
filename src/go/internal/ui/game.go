@@ -57,6 +57,24 @@ type Game struct {
 	winW, winH  int
 }
 
+// nodeScreenRect returns the screen-space rectangle of the given node under the
+// current camera transform. Coordinates include the transport bar offset.
+func (g *Game) nodeScreenRect(n *uiNode) (x1, y1, x2, y2 float64) {
+	step := StepPixels(g.cam.Scale)
+	camScale := float64(step) / float64(GridStep)
+	offX := math.Round(g.cam.OffsetX)
+	offY := math.Round(g.cam.OffsetY)
+	sx := offX + float64(step*n.I)
+	sy := offY + float64(step*n.J) + float64(topOffset)
+	size := float64(NodeSpriteSize) * camScale
+	half := size / 2
+	x1 = sx - half
+	y1 = sy - half
+	x2 = sx + half
+	y2 = sy + half
+	return
+}
+
 /* ─────────────── constructor & layout ─────────────────────────────────── */
 
 func New() *Game {
@@ -335,18 +353,7 @@ func (g *Game) drawGridPane(screen *ebiten.Image) {
 
 	// selected highlight
 	if g.sel != nil {
-		sx := float64(g.sel.I * GridStep)
-		sy := float64(g.sel.J * GridStep)
-		sx = sx*camScale + offX
-		sy = sy*camScale + offY
-		size := float64(NodeSpriteSize) * camScale
-		half := size / 2
-		x1 := sx - half
-		y1 := sy - half
-		x2 := sx + half
-		y2 := sy + half
-		y1 += float64(topOffset)
-		y2 += float64(topOffset)
+		x1, y1, x2, y2 := g.nodeScreenRect(g.sel)
 		var id ebiten.GeoM
 		DrawLineCam(screen, x1, y1, x2, y1, &id, color.RGBA{255, 0, 0, 255}, 2)
 		DrawLineCam(screen, x2, y1, x2, y2, &id, color.RGBA{255, 0, 0, 255}, 2)
