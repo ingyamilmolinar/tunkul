@@ -90,10 +90,33 @@ func TestClickAddsNode(t *testing.T) {
 	)
 	defer restore()
 
-	g.Update()
-	if g.nodeAt(0, 0) == nil {
-		t.Fatalf("expected node created at (0,0)")
-	}
+       g.Update()
+       n := g.nodeAt(0, 0)
+       if n == nil {
+               t.Fatalf("expected node created at (0,0)")
+       }
+       if !n.Selected || g.sel != n {
+               t.Fatalf("new node should be selected")
+       }
+
+       pressed = false
+       g.Update() // release
+       pressed = true
+       // click another position
+       restore2 := SetInputForTest(
+               func() (int, int) { return StepPixels(g.cam.Scale) + 10, topOffset + 10 },
+               func(b ebiten.MouseButton) bool { return pressed && b == ebiten.MouseButtonLeft },
+               func(ebiten.Key) bool { return false },
+               func() []rune { return nil },
+               func() (float64, float64) { return 0, 0 },
+               func() (int, int) { return 640, 480 },
+       )
+       defer restore2()
+       g.Update()
+       n2 := g.nodeAt(1, 0)
+       if n2 == nil || !n2.Selected || g.sel != n2 || n.Selected {
+               t.Fatalf("selection did not move to new node")
+       }
 }
 
 func TestRowLengthMatchesConnectedNodes(t *testing.T) {

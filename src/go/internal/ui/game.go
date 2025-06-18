@@ -16,9 +16,10 @@ const topOffset = 40 // transport bar height in px
 /* ─────────────── data types ───────────────────────────────────────────── */
 
 type uiNode struct {
-	ID   model.NodeID
-	I, J int     // grid indices
-	X, Y float64 // cached world coords (GridStep*I, GridStep*J)
+    ID   model.NodeID
+    I, J int     // grid indices
+    X, Y float64 // cached world coords (GridStep*I, GridStep*J)
+    Selected bool
 }
 type uiEdge struct{ A, B *uiNode }
 
@@ -119,9 +120,13 @@ func (g *Game) deleteNode(n *uiNode) {
 			keep = append(keep, e)
 		}
 	}
-	g.edges = keep
-	g.graph.RemoveNode(n.ID)
-	g.drum.Rows[0].Steps = g.graph.Row
+        g.edges = keep
+        g.graph.RemoveNode(n.ID)
+        g.drum.Rows[0].Steps = g.graph.Row
+       if g.sel == n {
+               g.sel.Selected = false
+               g.sel = nil
+       }
 }
 
 func (g *Game) addEdge(a, b *uiNode) {
@@ -182,11 +187,15 @@ func (g *Game) handleEditor() {
 	}
 
 	// ---------------- plain left-click → add/select node ---------
-	if left && !shift && !right && !g.linkDrag.active && !g.camDragging {
-		n := g.tryAddNode(i, j)
-		log.Printf("[game] add/select node %d,%d", i, j)
-		g.sel = n
-	}
+       if left && !shift && !right && !g.linkDrag.active && !g.camDragging {
+               n := g.tryAddNode(i, j)
+               log.Printf("[game] add/select node %d,%d", i, j)
+               if g.sel != nil {
+                       g.sel.Selected = false
+               }
+               g.sel = n
+               n.Selected = true
+       }
 }
 
 func (g *Game) handleLinkDrag(left, right bool, gx, gy float64, i, j int) {
@@ -316,13 +325,25 @@ func (g *Game) drawGridPane(screen *ebiten.Image) {
 		screen.DrawImage(NodeFrames[frame], op)
 	}
 
-	// selected highlight
-	if g.sel != nil {
-		DrawLineCam(screen, g.sel.X-18, g.sel.Y-18, g.sel.X+18, g.sel.Y-18, &cam, color.RGBA{255, 0, 0, 255}, 2)
-		DrawLineCam(screen, g.sel.X+18, g.sel.Y-18, g.sel.X+18, g.sel.Y+18, &cam, color.RGBA{255, 0, 0, 255}, 2)
-		DrawLineCam(screen, g.sel.X+18, g.sel.Y+18, g.sel.X-18, g.sel.Y+18, &cam, color.RGBA{255, 0, 0, 255}, 2)
-		DrawLineCam(screen, g.sel.X-18, g.sel.Y+18, g.sel.X-18, g.sel.Y-18, &cam, color.RGBA{255, 0, 0, 255}, 2)
-	}
+       // selected highlight
+       if g.sel != nil {
+               stepPx := StepPixels(g.cam.Scale)
+               offX := int(math.Round(g.cam.OffsetX))
+               offY := int(math.Round(g.cam.OffsetY))
+               sx := float64(offX + stepPx*g.sel.I)
+               sy := float64(offY + stepPx*g.sel.J)
+               size := float64(NodeSpriteSize) * g.cam.Scale
+               half := size / 2
+               x1 := sx - half
+               y1 := sy - half + float64(topOffset)
+               x2 := sx + half
+               y2 := sy + half + float64(topOffset)
+               var id ebiten.GeoM
+               DrawLineCam(screen, x1, y1, x2, y1, &id, color.RGBA{255, 0, 0, 255}, 2)
+               DrawLineCam(screen, x2, y1, x2, y2, &id, color.RGBA{255, 0, 0, 255}, 2)
+               DrawLineCam(screen, x2, y2, x1, y2, &id, color.RGBA{255, 0, 0, 255}, 2)
+               DrawLineCam(screen, x1, y2, x1, y1, &id, color.RGBA{255, 0, 0, 255}, 2)
+       }
 
 	// pulses
 	for _, p := range g.pulses {
