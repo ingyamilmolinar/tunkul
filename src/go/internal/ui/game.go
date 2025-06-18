@@ -276,13 +276,19 @@ func (g *Game) drawGridPane(screen *ebiten.Image) {
 	topH := g.split.Y - topOffset
 	frame := (g.frame / 6) % len(NodeFrames)
 
-	// grid lattice
-	for x := 0; x < g.winW; x += GridStep {
-		DrawLineCam(screen, float64(x), 1, float64(x), float64(topH),
+	// grid lattice covers full visible area regardless of zoom/pan
+	minX, maxX, minY, maxY := visibleWorldRect(g.cam, g.winW, topH)
+	startX := int(math.Floor(minX/float64(GridStep))) * GridStep
+	endX := int(math.Ceil(maxX/float64(GridStep))) * GridStep
+	startY := int(math.Floor(minY/float64(GridStep))) * GridStep
+	endY := int(math.Ceil(maxY/float64(GridStep))) * GridStep
+
+	for x := startX; x <= endX; x += GridStep {
+		DrawLineCam(screen, float64(x), float64(startY), float64(x), float64(endY),
 			&cam, color.RGBA{40, 40, 40, 255}, 1)
 	}
-	for y := 0; y < topH; y += GridStep {
-		DrawLineCam(screen, 0, float64(y), float64(g.winW), float64(y),
+	for y := startY; y <= endY; y += GridStep {
+		DrawLineCam(screen, float64(startX), float64(y), float64(endX), float64(y),
 			&cam, color.RGBA{40, 40, 40, 255}, 1)
 	}
 
@@ -376,6 +382,14 @@ func (g *Game) onBeat(step int) {
 	if root := g.rootNode(); root != nil {
 		g.spawnPulseFrom(root, 1)
 	}
+}
+
+func visibleWorldRect(cam *Camera, screenW, screenH int) (minX, maxX, minY, maxY float64) {
+	minX = (-cam.OffsetX) / cam.Scale
+	maxX = (float64(screenW) - cam.OffsetX) / cam.Scale
+	minY = (-cam.OffsetY - float64(topOffset)) / cam.Scale
+	maxY = (float64(screenH) - cam.OffsetY - float64(topOffset)) / cam.Scale
+	return
 }
 
 /* ─────────────── math helpers ─────────────────────────────────────────── */
