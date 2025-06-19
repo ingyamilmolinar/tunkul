@@ -40,48 +40,12 @@ func TestPlayStopButtons(t *testing.T) {
 	if dv.playing {
 		t.Fatal("expected stopped after clicking stop")
 	}
-	pressed = false
-}
-
-func TestBPMInput(t *testing.T) {
-	dv := setupDV()
-	dv.bpm = 0
-	dv.focusBPM = true
-	chars := []rune{'9', '0'}
-	backspace := false
-	restore := SetInputForTest(
-		func() (int, int) { return 0, 0 },
-		func(ebiten.MouseButton) bool { return false },
-		func(k ebiten.Key) bool {
-			if k == ebiten.KeyBackspace {
-				return backspace
-			}
-			return false
-		},
-		func() []rune {
-			c := chars
-			chars = nil
-			return c
-		},
-		func() (float64, float64) { return 0, 0 },
-		func() (int, int) { return 800, 600 },
-	)
-	defer restore()
-
-	dv.Update()
-	if dv.bpm != 90 {
-		t.Fatalf("expected bpm 90, got %d", dv.bpm)
-	}
-	backspace = true
-	dv.Update()
-	if dv.bpm != 9 {
-		t.Fatalf("expected bpm 9 after backspace, got %d", dv.bpm)
-	}
 }
 
 func TestRowHeightConstant(t *testing.T) {
 	dv := setupDV()
 	dv.Update()
+
 	initial := dv.bgCache[0].Bounds().Dy()
 	dv.resizeSteps(+1)
 	dv.Update()

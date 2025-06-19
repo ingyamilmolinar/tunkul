@@ -1,10 +1,8 @@
 WASM_OUT = ../js/main.wasm
 
-wasm:
-	cd src/go && go mod download
-	cd src/go && GOOS=js GOARCH=wasm go build -o $(WASM_OUT) ./cmd/...
+test-xvfb:
+	cd src/go; xvfb-run go test -tags test ./...
 
-serve:
 	cd src/js && python3 -m http.server 8080
 
 run:

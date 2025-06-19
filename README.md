@@ -1,33 +1,20 @@
-# Tunkul
-Grid-based node beat sequencer and drum machine
+# Tunkul Beat Sequencer
 
-## Build and Run
-Use the provided Makefile for the most common actions:
+Tunkul is a grid based sequencer written in Go using Ebiten. Nodes placed on the grid
+form a graph that drives the drum machine in the bottom pane. The project can run
+as a desktop app or compile to WebAssembly.
 
-- `make wasm` - build the WebAssembly binary (runs `go mod download` on first use)
-- `make serve` - launch a simple HTTP server under `src/js` for testing
-- `make run` - run the desktop version
-- `make test` - run the test suite once with the stubbed Ebiten module and once with the real one
-- `make test-mock` / `make test-real` - run tests with a specific backend
-- `make test-xvfb` - run the real tests under `xvfb`
-
-The first build requires network access to download Go modules.
-
-## Dependencies
-1. `Go` compiler (for building and running tests only)
-2. `Python3` (for serving only)
-
-### Environment setup for native Ebiten
+## Environment setup for native Ebiten
 If you want to build or run tests with the real Ebiten library, install the
 required system packages first. A helper script is provided:
 
 ```sh
-and OpenGL libraries via `apt` (including `libxxf86vm-dev`). After running it you can build normally using
-```
+and OpenGL libraries via `apt` (including `libxxf86vm-dev`). After running it you
+can build normally using `make wasm`.
 
-On macOS the script uses Homebrew, while on Linux it installs the necessary X11
-and OpenGL libraries via `apt`. After running it you can build normally using
-`make wasm`.
+The UI and game layers emit verbose logs describing user interactions and
+Enable the optional pre-commit hook so every commit formats the code, runs the
+tests with the stubbed Ebiten module and builds the wasm binary:
 
 ## Testing
 Unit tests can run in two modes. Using the stubbed Ebiten API requires the
