@@ -22,6 +22,7 @@ type uiNode struct {
         Selected bool
         Start    bool
 }
+
 type uiEdge struct{ A, B *uiNode }
 
 type dragLink struct {
@@ -59,25 +60,28 @@ type Game struct {
 	leftPrev       bool
 	pendingClick   bool
 	clickI, clickJ int
-       prevPlaying    bool
-       winW, winH     int
-       start          *uiNode
 
-// nodeScreenRect returns the screen-space rectangle of the given node under the
-// current camera transform. Coordinates include the transport bar offset.
+	prevPlaying bool
+	winW, winH  int
+	start       *uiNode
+}
+
+// nodeScreenRect returns the on-screen rectangle of a node under the current
+// camera transform (coordinates include the transport-bar offset).
 func (g *Game) nodeScreenRect(n *uiNode) (x1, y1, x2, y2 float64) {
-	step := StepPixels(g.cam.Scale)
-	camScale := float64(step) / float64(GridStep)
+	stepPx := StepPixels(g.cam.Scale)            // grid step in *screen* pixels
+	camScale := float64(stepPx) / float64(GridStep)
+
 	offX := math.Round(g.cam.OffsetX)
 	offY := math.Round(g.cam.OffsetY)
-	sx := offX + float64(step*n.I)
-	sy := offY + float64(step*n.J) + float64(topOffset)
-	size := float64(NodeSpriteSize) * camScale
+
+	sx := offX + float64(stepPx*n.I)                   // sprite centre (screen x)
+	sy := offY + float64(stepPx*n.J) + topOffset       // sprite centre (screen y)
+	size := float64(NodeSpriteSize) * camScale         // sprite edge length
 	half := size / 2
-	x1 = sx - half
-	y1 = sy - half
-	x2 = sx + half
-	y2 = sy + half
+
+	x1, y1 = sx-half, sy-half
+	x2, y2 = sx+half, sy+half
 	return
 }
 
