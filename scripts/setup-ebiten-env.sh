@@ -17,7 +17,7 @@ case "$(uname)" in
         sudo apt-get update
         sudo apt-get install -y build-essential libgl1-mesa-dev xorg-dev \
             libasound2-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev \
-            pkg-config
+            libxxf86vm-dev pkg-config
         ;;
 esac
 
