@@ -51,9 +51,10 @@ const (
 type Key int
 
 const (
-	KeyShiftLeft Key = iota
-	KeyShiftRight
-	KeyBackspace
+        KeyShiftLeft Key = iota
+        KeyShiftRight
+        KeyBackspace
+       KeyS
 )
 
 // Window and run stubs

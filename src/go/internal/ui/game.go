@@ -16,10 +16,11 @@ const topOffset = 40 // transport bar height in px
 /* ─────────────── data types ───────────────────────────────────────────── */
 
 type uiNode struct {
-	ID       model.NodeID
-	I, J     int     // grid indices
-	X, Y     float64 // cached world coords (GridStep*I, GridStep*J)
-	Selected bool
+        ID       model.NodeID
+        I, J     int     // grid indices
+        X, Y     float64 // cached world coords (GridStep*I, GridStep*J)
+        Selected bool
+        Start    bool
 }
 type uiEdge struct{ A, B *uiNode }
 
@@ -58,8 +59,9 @@ type Game struct {
 	leftPrev       bool
 	pendingClick   bool
 	clickI, clickJ int
-	winW, winH     int
-}
+       prevPlaying    bool
+       winW, winH     int
+       start          *uiNode
 
 // nodeScreenRect returns the screen-space rectangle of the given node under the
 // current camera transform. Coordinates include the transport bar offset.
@@ -132,10 +134,14 @@ func (g *Game) tryAddNode(i, j int) *uiNode {
 	x := float64(i * GridStep)
 	y := float64(j * GridStep)
 	id := g.graph.AddNode(i, j)
-	n := &uiNode{ID: id, I: i, J: j, X: x, Y: y}
-	g.nodes = append(g.nodes, n)
-	g.drum.Rows[0].Steps = g.graph.Row
-	return n
+       n := &uiNode{ID: id, I: i, J: j, X: x, Y: y}
+       if g.start == nil {
+               g.start = n
+               n.Start = true
+       }
+       g.nodes = append(g.nodes, n)
+       g.drum.Rows[0].Steps = g.graph.Row
+       return n
 }
 
 func (g *Game) deleteNode(n *uiNode) {
@@ -173,19 +179,22 @@ func (g *Game) addEdge(a, b *uiNode) {
 			return
 		}
 	}
-	g.edges = append(g.edges, uiEdge{a, b})
+       g.edges = append(g.edges, uiEdge{a, b})
+       g.graph.Edges[[2]model.NodeID{a.ID, b.ID}] = struct{}{}
 }
 
 func (g *Game) deleteEdge(a, b *uiNode) {
-	for i := 0; i < len(g.edges); {
-		e := g.edges[i]
-		if (e.A == a && e.B == b) || (e.A == b && e.B == a) {
-			g.edges[i] = g.edges[len(g.edges)-1]
-			g.edges = g.edges[:len(g.edges)-1]
-		} else {
-			i++
-		}
-	}
+       for i := 0; i < len(g.edges); {
+               e := g.edges[i]
+               if (e.A == a && e.B == b) || (e.A == b && e.B == a) {
+                       g.edges[i] = g.edges[len(g.edges)-1]
+                       g.edges = g.edges[:len(g.edges)-1]
+               } else {
+                       i++
+               }
+       }
+       delete(g.graph.Edges, [2]model.NodeID{a.ID, b.ID})
+       delete(g.graph.Edges, [2]model.NodeID{b.ID, a.ID})
 }
 
 /* ─────────────── input handling ───────────────────────────────────────── */
@@ -233,20 +242,27 @@ func (g *Game) handleEditor() {
 		g.pendingClick = true
 		g.camDragged = false
 	}
-	if !left && g.leftPrev {
-		if g.pendingClick && !g.camDragged && !shift && !right && !g.linkDrag.active {
-			n := g.tryAddNode(g.clickI, g.clickJ)
-			log.Printf("[game] add/select node %d,%d", g.clickI, g.clickJ)
-			if g.sel != nil {
-				g.sel.Selected = false
-			}
-			g.sel = n
-			n.Selected = true
-		}
-		g.pendingClick = false
-		g.camDragged = false
-	}
-	g.leftPrev = left
+       if !left && g.leftPrev {
+               if g.pendingClick && !g.camDragged && !shift && !right && !g.linkDrag.active {
+                       n := g.tryAddNode(g.clickI, g.clickJ)
+                       log.Printf("[game] add/select node %d,%d", g.clickI, g.clickJ)
+                       if g.sel != nil {
+                               g.sel.Selected = false
+                       }
+                       g.sel = n
+                       n.Selected = true
+               }
+               g.pendingClick = false
+               g.camDragged = false
+       }
+       if isKeyPressed(ebiten.KeyS) && g.sel != nil {
+               if g.start != nil {
+                       g.start.Start = false
+               }
+               g.start = g.sel
+               g.start.Start = true
+       }
+       g.leftPrev = left
 }
 
 func (g *Game) handleLinkDrag(left, right bool, gx, gy float64, i, j int) {
@@ -374,19 +390,27 @@ func (g *Game) drawGridPane(screen *ebiten.Image) {
 			&cam, color.RGBA{200, 200, 200, 255}, 2)
 	}
 
-	// nodes
-	for _, n := range g.nodes {
-		op := &ebiten.DrawImageOptions{}
-		op.GeoM.Translate(-float64(NodeSpriteSize)/2, -float64(NodeSpriteSize)/2)
-		op.GeoM.Translate(n.X, n.Y)
-		op.GeoM.Concat(cam)
-		screen.DrawImage(NodeFrames[frame], op)
-		if g.frame%60 == 0 {
-			sx := offX + n.X*camScale
-			sy := offY + n.Y*camScale + float64(topOffset)
-			log.Printf("[draw] node %d at %.2f,%.2f screen %.2f,%.2f scale %.2f", n.ID, n.X, n.Y, sx, sy, camScale)
-		}
-	}
+        // nodes
+        for _, n := range g.nodes {
+                op := &ebiten.DrawImageOptions{}
+                op.GeoM.Translate(-float64(NodeSpriteSize)/2, -float64(NodeSpriteSize)/2)
+                op.GeoM.Translate(n.X, n.Y)
+                op.GeoM.Concat(cam)
+                screen.DrawImage(NodeFrames[frame], op)
+               if n.Start {
+                       x1, y1, x2, y2 := g.nodeScreenRect(n)
+                       var id ebiten.GeoM
+                       DrawLineCam(screen, x1, y1, x2, y1, &id, color.RGBA{0, 255, 0, 255}, 2)
+                       DrawLineCam(screen, x2, y1, x2, y2, &id, color.RGBA{0, 255, 0, 255}, 2)
+                       DrawLineCam(screen, x2, y2, x1, y2, &id, color.RGBA{0, 255, 0, 255}, 2)
+                       DrawLineCam(screen, x1, y2, x1, y1, &id, color.RGBA{0, 255, 0, 255}, 2)
+               }
+                if g.frame%60 == 0 {
+                        sx := offX + n.X*camScale
+                        sy := offY + n.Y*camScale + float64(topOffset)
+                        log.Printf("[draw] node %d at %.2f,%.2f screen %.2f,%.2f scale %.2f", n.ID, n.X, n.Y, sx, sy, camScale)
+                }
+        }
 
 	// selected highlight
 	if g.sel != nil {
@@ -422,7 +446,10 @@ func (g *Game) drawDrumPane(dst *ebiten.Image) {
 }
 
 func (g *Game) rootNode() *uiNode {
-	var root *uiNode
+       if g.start != nil {
+               return g.start
+       }
+       var root *uiNode
 	for _, n := range g.nodes {
 		if n.J != 0 {
 			continue

@@ -457,3 +457,27 @@ func TestSplitterDragDoesNotCreateNode(t *testing.T) {
 		t.Fatalf("unexpected node created during splitter drag")
 	}
 }
+
+func TestStartNodeSelection(t *testing.T) {
+       g := New()
+       g.Layout(640, 480)
+       n1 := g.tryAddNode(0, 0)
+       if g.start != n1 || !n1.Start {
+               t.Fatalf("first node should be start")
+       }
+       n2 := g.tryAddNode(1, 0)
+       g.sel = n2
+       restore := SetInputForTest(
+               func() (int, int) { return 0, topOffset + 10 },
+               func(ebiten.MouseButton) bool { return false },
+               func(k ebiten.Key) bool { return k == ebiten.KeyS },
+               func() []rune { return nil },
+               func() (float64, float64) { return 0, 0 },
+               func() (int, int) { return 640, 480 },
+       )
+       defer restore()
+       g.Update()
+       if g.start != n2 || !n2.Start || n1.Start {
+               t.Fatalf("start node not updated")
+       }
+}
