@@ -334,6 +334,31 @@ func TestDragPanDoesNotCreateNode(t *testing.T) {
 	}
 }
 
+func TestBottomPaneClickIgnored(t *testing.T) {
+	g := New()
+	g.Layout(640, 480)
+	g.cam.OffsetY = 100
+
+	pressed := true
+	restore := SetInputForTest(
+		func() (int, int) { return 10, g.split.Y + 10 },
+		func(b ebiten.MouseButton) bool { return pressed && b == ebiten.MouseButtonLeft },
+		func(ebiten.Key) bool { return false },
+		func() []rune { return nil },
+		func() (float64, float64) { return 0, 0 },
+		func() (int, int) { return 640, 480 },
+	)
+	defer restore()
+
+	g.Update() // press in bottom pane
+	pressed = false
+	g.Update() // release
+
+	if len(g.nodes) != 0 {
+		t.Fatalf("node created from bottom pane click")
+	}
+}
+
 func TestHighlightMatchesNode(t *testing.T) {
 	g := New()
 	g.Layout(640, 480)
@@ -363,72 +388,72 @@ func TestHighlightMatchesNode(t *testing.T) {
 }
 
 func TestSplitterDragPersists(t *testing.T) {
-    g := New()
-    g.Layout(640, 480)
-    startY := g.split.Y
-    pos := []struct{ x, y int }{
-        {10, startY},
-        {10, startY + 50},
-        {10, startY + 50},
-    }
-    idx := 0
-    pressed := true
-    restore := SetInputForTest(
-        func() (int, int) { return pos[idx].x, pos[idx].y },
-        func(b ebiten.MouseButton) bool { return pressed && b == ebiten.MouseButtonLeft },
-        func(ebiten.Key) bool { return false },
-        func() []rune { return nil },
-        func() (float64, float64) { return 0, 0 },
-        func() (int, int) { return 640, 480 },
-    )
-    defer restore()
+	g := New()
+	g.Layout(640, 480)
+	startY := g.split.Y
+	pos := []struct{ x, y int }{
+		{10, startY},
+		{10, startY + 50},
+		{10, startY + 50},
+	}
+	idx := 0
+	pressed := true
+	restore := SetInputForTest(
+		func() (int, int) { return pos[idx].x, pos[idx].y },
+		func(b ebiten.MouseButton) bool { return pressed && b == ebiten.MouseButtonLeft },
+		func(ebiten.Key) bool { return false },
+		func() []rune { return nil },
+		func() (float64, float64) { return 0, 0 },
+		func() (int, int) { return 640, 480 },
+	)
+	defer restore()
 
-    g.Update() // press
-    idx = 1
-    g.Update() // drag
-    pressed = false
-    idx = 2
-    g.Update() // release
-    g.Layout(640, 480) // layout called again as in game loop
-    g.Update()
-    if g.split.Y != startY+50 {
-        t.Fatalf("splitter Y=%d want %d", g.split.Y, startY+50)
-    }
+	g.Update() // press
+	idx = 1
+	g.Update() // drag
+	pressed = false
+	idx = 2
+	g.Update()         // release
+	g.Layout(640, 480) // layout called again as in game loop
+	g.Update()
+	if g.split.Y != startY+50 {
+		t.Fatalf("splitter Y=%d want %d", g.split.Y, startY+50)
+	}
 }
 func TestSplitterDragDoesNotCreateNode(t *testing.T) {
-    g := New()
-    g.Layout(640, 480)
-    startY := g.split.Y
-    pos := []struct{ x, y int }{
-        {10, startY},       // press on divider
-        {10, startY + 40},  // drag
-        {10, startY + 40},  // release
-        {10, startY + 40},  // idle
-    }
-    idx := 0
-    pressed := true
-    restore := SetInputForTest(
-        func() (int, int) { return pos[idx].x, pos[idx].y },
-        func(b ebiten.MouseButton) bool { return pressed && b == ebiten.MouseButtonLeft },
-        func(ebiten.Key) bool { return false },
-        func() []rune { return nil },
-        func() (float64, float64) { return 0, 0 },
-        func() (int, int) { return 640, 480 },
-    )
-    defer restore()
+	g := New()
+	g.Layout(640, 480)
+	startY := g.split.Y
+	pos := []struct{ x, y int }{
+		{10, startY},      // press on divider
+		{10, startY + 40}, // drag
+		{10, startY + 40}, // release
+		{10, startY + 40}, // idle
+	}
+	idx := 0
+	pressed := true
+	restore := SetInputForTest(
+		func() (int, int) { return pos[idx].x, pos[idx].y },
+		func(b ebiten.MouseButton) bool { return pressed && b == ebiten.MouseButtonLeft },
+		func(ebiten.Key) bool { return false },
+		func() []rune { return nil },
+		func() (float64, float64) { return 0, 0 },
+		func() (int, int) { return 640, 480 },
+	)
+	defer restore()
 
-    g.Update() // press
-    idx = 1
-    g.Update() // drag
-    pressed = false
-    idx = 2
-    g.Update() // release while over divider
-    idx = 3
-    g.Update() // after release
-    g.Layout(640, 480)
-    g.Update()
+	g.Update() // press
+	idx = 1
+	g.Update() // drag
+	pressed = false
+	idx = 2
+	g.Update() // release while over divider
+	idx = 3
+	g.Update() // after release
+	g.Layout(640, 480)
+	g.Update()
 
-    if len(g.nodes) != 0 {
-        t.Fatalf("unexpected node created during splitter drag")
-    }
+	if len(g.nodes) != 0 {
+		t.Fatalf("unexpected node created during splitter drag")
+	}
 }

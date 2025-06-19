@@ -203,11 +203,13 @@ func (g *Game) handleEditor() {
 
 	// coords -> world
 	x, y := cursorPosition()
-	wx := (float64(x) - g.cam.OffsetX) / g.cam.Scale
-	wy := (float64(y-topOffset) - g.cam.OffsetY) / g.cam.Scale
-	if wy > float64(g.split.Y-topOffset) { // ignore bottom pane
+	if y < topOffset || y >= g.split.Y {
+		g.pendingClick = false
+		g.leftPrev = left
 		return
 	}
+	wx := (float64(x) - g.cam.OffsetX) / g.cam.Scale
+	wy := (float64(y-topOffset) - g.cam.OffsetY) / g.cam.Scale
 	gx, gy, i, j := Snap(wx, wy)
 
 	// ---------------- delete node (right-click) ----------------
