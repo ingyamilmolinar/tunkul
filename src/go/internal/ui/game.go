@@ -54,6 +54,7 @@ type Game struct {
 	sel            *uiNode
 	linkDrag       dragLink
 	camDragging    bool
+	camDragged     bool
 	leftPrev       bool
 	pendingClick   bool
 	clickI, clickJ int
@@ -215,9 +216,10 @@ func (g *Game) handleEditor() {
 	if left && !g.leftPrev {
 		g.clickI, g.clickJ = i, j
 		g.pendingClick = true
+		g.camDragged = false
 	}
 	if !left && g.leftPrev {
-		if g.pendingClick && !g.camDragging && !shift && !right && !g.linkDrag.active {
+		if g.pendingClick && !g.camDragged && !shift && !right && !g.linkDrag.active {
 			n := g.tryAddNode(g.clickI, g.clickJ)
 			log.Printf("[game] add/select node %d,%d", g.clickI, g.clickJ)
 			if g.sel != nil {
@@ -227,6 +229,7 @@ func (g *Game) handleEditor() {
 			n.Selected = true
 		}
 		g.pendingClick = false
+		g.camDragged = false
 	}
 	g.leftPrev = left
 }
@@ -274,7 +277,12 @@ func (g *Game) Update() error {
 	// camera pan only when not dragging link or splitter
 	shift := isKeyPressed(ebiten.KeyShiftLeft) || isKeyPressed(ebiten.KeyShiftRight)
 	panOK := !g.linkDrag.active && !g.split.dragging && !shift
-	g.camDragging = g.cam.HandleMouse(panOK)
+	left := isMouseButtonPressed(ebiten.MouseButtonLeft)
+	drag := g.cam.HandleMouse(panOK)
+	g.camDragging = drag
+	if left && drag {
+		g.camDragged = true
+	}
 
 	// editor interactions
 	g.handleEditor()

@@ -303,3 +303,33 @@ func TestHighlightScalesWithZoom(t *testing.T) {
 		t.Fatalf("highlight width did not scale: w1=%f w2=%f", w1, w2)
 	}
 }
+
+func TestDragPanDoesNotCreateNode(t *testing.T) {
+	g := New()
+	g.Layout(640, 480)
+	pos := []struct{ x, y int }{
+		{10, topOffset + 10},
+		{30, topOffset + 20},
+	}
+	idx := 0
+	pressed := true
+	restore := SetInputForTest(
+		func() (int, int) { return pos[idx].x, pos[idx].y },
+		func(b ebiten.MouseButton) bool { return pressed && b == ebiten.MouseButtonLeft },
+		func(ebiten.Key) bool { return false },
+		func() []rune { return nil },
+		func() (float64, float64) { return 0, 0 },
+		func() (int, int) { return 640, 480 },
+	)
+	defer restore()
+
+	g.Update() // press
+	idx = 1
+	g.Update() // drag
+	pressed = false
+	g.Update() // release
+
+	if g.nodeAt(0, 0) != nil {
+		t.Fatalf("node created after drag")
+	}
+}
