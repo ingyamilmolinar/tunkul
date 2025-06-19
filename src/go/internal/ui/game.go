@@ -360,25 +360,31 @@ func (g *Game) drawGridPane(screen *ebiten.Image) {
 	}
 
 	// nodes
-	for _, n := range g.nodes {
-		op := &ebiten.DrawImageOptions{}
-		op.GeoM.Scale(camScale, camScale)
-		op.GeoM.Translate(n.X, n.Y)
-		op.GeoM.Concat(cam)
-		size := float64(NodeSpriteSize) * camScale
-		op.GeoM.Translate(-size/2, -size/2)
-		screen.DrawImage(NodeFrames[frame], op)
-	}
+        for _, n := range g.nodes {
+                op := &ebiten.DrawImageOptions{}
+                op.GeoM.Translate(-float64(NodeSpriteSize)/2, -float64(NodeSpriteSize)/2)
+                op.GeoM.Translate(n.X, n.Y)
+                op.GeoM.Concat(cam)
+                screen.DrawImage(NodeFrames[frame], op)
+                if g.frame%60 == 0 {
+                        sx := offX + n.X*camScale
+                        sy := offY + n.Y*camScale + float64(topOffset)
+                        log.Printf("[draw] node %d at %.2f,%.2f screen %.2f,%.2f scale %.2f", n.ID, n.X, n.Y, sx, sy, camScale)
+                }
+        }
 
 	// selected highlight
-	if g.sel != nil {
-		x1, y1, x2, y2 := g.nodeScreenRect(g.sel)
-		var id ebiten.GeoM
-		DrawLineCam(screen, x1, y1, x2, y1, &id, color.RGBA{255, 0, 0, 255}, 2)
-		DrawLineCam(screen, x2, y1, x2, y2, &id, color.RGBA{255, 0, 0, 255}, 2)
-		DrawLineCam(screen, x2, y2, x1, y2, &id, color.RGBA{255, 0, 0, 255}, 2)
-		DrawLineCam(screen, x1, y2, x1, y1, &id, color.RGBA{255, 0, 0, 255}, 2)
-	}
+        if g.sel != nil {
+                x1, y1, x2, y2 := g.nodeScreenRect(g.sel)
+                var id ebiten.GeoM
+                DrawLineCam(screen, x1, y1, x2, y1, &id, color.RGBA{255, 0, 0, 255}, 2)
+                DrawLineCam(screen, x2, y1, x2, y2, &id, color.RGBA{255, 0, 0, 255}, 2)
+                DrawLineCam(screen, x2, y2, x1, y2, &id, color.RGBA{255, 0, 0, 255}, 2)
+                DrawLineCam(screen, x1, y2, x1, y1, &id, color.RGBA{255, 0, 0, 255}, 2)
+                if g.frame%60 == 0 {
+                        log.Printf("[draw] highlight %.2f,%.2f -> %.2f,%.2f", x1, y1, x2, y2)
+                }
+        }
 
 	// pulses
 	for _, p := range g.pulses {
