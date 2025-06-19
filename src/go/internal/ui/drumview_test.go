@@ -42,15 +42,16 @@ func TestPlayStopButtons(t *testing.T) {
 	}
 }
 
-func TestRowHeightConstant(t *testing.T) {
+func TestRowHeightFillsPane(t *testing.T) {
 	dv := setupDV()
 	dv.Update()
-
-	initial := dv.bgCache[0].Bounds().Dy()
-	dv.resizeSteps(+1)
+	want := dv.Bounds.Dy() / len(dv.Rows)
+	if dv.rowHeight() != want {
+		t.Fatalf("expected row height %d, got %d", want, dv.rowHeight())
 	dv.Update()
-	if dv.bgCache[0].Bounds().Dy() != initial {
-		t.Fatalf("row height changed from %d to %d", initial, dv.bgCache[0].Bounds().Dy())
+	want := dv.Bounds.Dy() / len(dv.Rows)
+	if dv.rowHeight() != want {
+		t.Fatalf("row height changed to %d want %d", dv.rowHeight(), want)
 	}
 }
 

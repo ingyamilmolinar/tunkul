@@ -46,10 +46,14 @@ type DrumView struct {
 	// drag-rotate
 	dragRow    int
 	prevMouseX int
-}
 
-func (dv *DrumView) rowHeight() int {
-	if len(dv.Rows) == 0 {
+	stepsLen int
+}
+	rows := len(dv.Rows)
+	if rows == 0 {
+		return 0
+	}
+	return dv.Bounds.Dy() / rows
 		return 0
 	}
 	return dv.Bounds.Dy() / len(dv.Rows)
@@ -169,7 +173,14 @@ func (dv *DrumView) Update() {
 /* ─── layout helpers ───────────────────────────────── */
 
 func (dv *DrumView) resizeSteps(dir int) {
-	row := dv.Rows[0]
+	if dv.stepsLen != steps {
+		dv.stepsLen = steps
+		dv.bgDirty = true
+	}
+	rowH := dv.rowHeight()
+	if dv.bgDirty || len(dv.bgCache) != len(dv.Rows) ||
+		(len(dv.bgCache) > 0 && (dv.bgCache[0].Bounds().Dx() != dv.Bounds.Dx() ||
+			dv.bgCache[0].Bounds().Dy() != rowH)) {
 	log.Printf("[drumview] resizeSteps dir=%d before=%d", dir, len(row.Steps))
 	switch dir {
 	case -1:
