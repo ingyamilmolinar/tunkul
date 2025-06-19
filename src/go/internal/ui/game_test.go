@@ -333,3 +333,31 @@ func TestDragPanDoesNotCreateNode(t *testing.T) {
 		t.Fatalf("node created after drag")
 	}
 }
+
+func TestHighlightMatchesNode(t *testing.T) {
+	g := New()
+	g.Layout(640, 480)
+	n := g.tryAddNode(2, 3)
+	g.sel = n
+	g.cam.Scale = 1.5
+	g.cam.OffsetX = 12
+	g.cam.OffsetY = 8
+
+	step := StepPixels(g.cam.Scale)
+	camScale := float64(step) / float64(GridStep)
+	offX := math.Round(g.cam.OffsetX)
+	offY := math.Round(g.cam.OffsetY)
+	worldX := float64(n.I * GridStep)
+	worldY := float64(n.J * GridStep)
+	screenX := worldX*camScale + offX
+	screenY := worldY*camScale + offY + float64(topOffset)
+	half := float64(NodeSpriteSize) * camScale / 2
+
+	x1, y1, x2, y2 := g.nodeScreenRect(n)
+	if math.Abs(x1-(screenX-half)) > 1e-3 || math.Abs(x2-(screenX+half)) > 1e-3 ||
+		math.Abs(y1-(screenY-half)) > 1e-3 || math.Abs(y2-(screenY+half)) > 1e-3 {
+		t.Fatalf("highlight mismatch: (%f,%f,%f,%f) want (%f,%f,%f,%f)",
+			x1, y1, x2, y2,
+			screenX-half, screenY-half, screenX+half, screenY+half)
+	}
+}
