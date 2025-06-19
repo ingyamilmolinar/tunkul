@@ -99,12 +99,19 @@ func New() *Game {
 }
 
 func (g *Game) Layout(w, h int) (int, int) {
-	g.winW, g.winH = w, h
-	// update splitter + drum bounds
-	g.split.Y = h / 2
-	g.drum.SetBounds(image.Rect(0, g.split.Y, w, h))
-	log.Printf("[game] layout %dx%d", w, h)
-	return w, h
+        g.winW, g.winH = w, h
+        // update splitter + drum bounds
+        if g.split == nil {
+                g.split = NewSplitter(h)
+        } else {
+                if g.split.ratio == 0 {
+                        g.split.ratio = float64(g.split.Y) / float64(h)
+                }
+                g.split.Y = int(float64(h) * g.split.ratio)
+        }
+        g.drum.SetBounds(image.Rect(0, g.split.Y, w, h))
+        log.Printf("[game] layout %dx%d", w, h)
+        return w, h
 }
 
 /* ─────────────── helpers — graph ops ──────────────────────────────────── */
