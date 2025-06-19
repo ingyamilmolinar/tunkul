@@ -1,13 +1,17 @@
 # Tunkul
 Grid-based node beat sequencer and drum machine
 
-## Run server for pre-compiled wasm
-make serve
+## Build and Run
+Use the provided Makefile for the most common actions:
 
-## Build
-make wasm
-The build will automatically run `go mod download` to fetch dependencies the
-first time, so network access is required on a fresh checkout.
+- `make wasm` - build the WebAssembly binary (runs `go mod download` on first use)
+- `make serve` - launch a simple HTTP server under `src/js` for testing
+- `make run` - run the desktop version
+- `make test` - run the test suite once with the stubbed Ebiten module and once with the real one
+- `make test-mock` / `make test-real` - run tests with a specific backend
+- `make test-xvfb` - run the real tests under `xvfb`
+
+The first build requires network access to download Go modules.
 
 ## Dependencies
 1. `Go` compiler (for building and running tests only)
