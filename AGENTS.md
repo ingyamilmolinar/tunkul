@@ -5,6 +5,8 @@
   `go test -tags test -modfile=go.test.mod ./...` for maximum portability.
   If your system has a working X11 environment you may instead execute
   `xvfb-run go test ./...` to test against the real Ebiten library.
+- **Always build and run tests before pushing or creating a PR** using
+  `go test -tags test -modfile=go.test.mod ./...` and `make wasm`.
 - Build the WebAssembly binary using `make wasm` from the repo root. This command
   runs `go mod download` before compiling, so the first build requires network
   access.
