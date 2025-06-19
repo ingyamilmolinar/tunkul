@@ -123,3 +123,30 @@ func TestSetBoundsRebuilds(t *testing.T) {
 		t.Fatalf("expected height to increase from %d to %d", h1, h2)
 	}
 }
+func TestBackgroundWidthMatchesBounds(t *testing.T) {
+	dv := setupDV()
+	dv.Update()
+	for idx, img := range dv.bgCache {
+		if img.Bounds().Dx() != dv.Bounds.Dx() {
+			t.Fatalf("row %d width=%d want %d", idx, img.Bounds().Dx(), dv.Bounds.Dx())
+		}
+	}
+	dv.resizeSteps(+1)
+	dv.Update()
+	for idx, img := range dv.bgCache {
+		if img.Bounds().Dx() != dv.Bounds.Dx() {
+			t.Fatalf("after resize row %d width=%d want %d", idx, img.Bounds().Dx(), dv.Bounds.Dx())
+		}
+	}
+}
+
+func TestRowHeightUnchangedAfterNode(t *testing.T) {
+	g := New()
+	g.Layout(200, 120)
+	h1 := g.drum.rowHeight()
+	g.tryAddNode(0, 0)
+	g.Update()
+	if g.drum.rowHeight() != h1 {
+		t.Fatalf("row height changed from %d to %d", h1, g.drum.rowHeight())
+	}
+}

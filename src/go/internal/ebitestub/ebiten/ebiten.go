@@ -7,16 +7,19 @@ import (
 	"image/color"
 )
 
-type Image struct{}
+type Image struct{ w, h int }
 
-func NewImage(w, h int) *Image                 { return &Image{} }
-func NewImageFromImage(img image.Image) *Image { return &Image{} }
+func NewImage(w, h int) *Image { return &Image{w: w, h: h} }
+func NewImageFromImage(img image.Image) *Image {
+	b := img.Bounds()
+	return &Image{w: b.Dx(), h: b.Dy()}
+}
 
 func (i *Image) DrawImage(src *Image, opts *DrawImageOptions) {}
 func (i *Image) Fill(c color.Color)                           {}
-func (i *Image) Bounds() image.Rectangle                      { return image.Rect(0, 0, 0, 0) }
-func (i *Image) SubImage(r image.Rectangle) image.Image       { return &Image{} }
-func (i *Image) Size() (int, int)                             { return 0, 0 }
+func (i *Image) Bounds() image.Rectangle                      { return image.Rect(0, 0, i.w, i.h) }
+func (i *Image) SubImage(r image.Rectangle) image.Image       { return &Image{w: r.Dx(), h: r.Dy()} }
+func (i *Image) Size() (int, int)                             { return i.w, i.h }
 func (i *Image) ColorModel() color.Model                      { return color.RGBAModel }
 func (i *Image) At(x, y int) color.Color                      { return color.RGBA{} }
 
