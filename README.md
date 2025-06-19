@@ -2,10 +2,10 @@
 Grid-based node beat sequencer and drum machine
 
 ## Run server for pre-compiled wasm
-make run-server
+make serve
 
 ## Build
-make all
+make wasm
 The build will automatically run `go mod download` to fetch dependencies the
 first time, so network access is required on a fresh checkout.
 
@@ -18,43 +18,27 @@ If you want to build or run tests with the real Ebiten library, install the
 required system packages first. A helper script is provided:
 
 ```sh
-./scripts/setup-ebiten-env.sh
+make dependencies
 ```
 
 On macOS the script uses Homebrew, while on Linux it installs the necessary X11
 and OpenGL libraries via `apt`. After running it you can build normally using
-`make all`.
+`make wasm`.
 
 ## Testing
 Unit tests can run in two modes. Using the stubbed Ebiten API requires the
 alternate module file:
 
 ```sh
-cd src/go
-go test -tags test -modfile=go.test.mod ./...
+make test-mock
 ```
 
 If you have a working X11 setup (or run under `xvfb-run`) you can instead test
 against the real Ebiten library:
 
 ```sh
-xvfb-run go test ./...
-```
-
-### UI functional tests
-
-Tests under `internal/ui` simulate input events to validate button behaviour and
-layout calculations. Run them using the stubbed Ebiten module:
-
-```sh
-go test -tags test -modfile=go.test.mod ./internal/ui
-```
-
-To run the same tests with the real Ebiten backend you need an X11 display (or
-`xvfb`). Execute:
-
-```sh
-xvfb-run go test ./internal/ui
+make test-real
+make test-xvfb
 ```
 
 ## Debugging

@@ -21,4 +21,4 @@ case "$(uname)" in
         ;;
 esac
 
-echo "Environment ready. Run 'make all' or 'go test -tags test -modfile=go.test.mod ./...'"
+echo "Environment ready"
