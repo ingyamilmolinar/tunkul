@@ -11,9 +11,9 @@ import (
 	"github.com/ingyamilmolinar/tunkul/core/model"
 )
 
-const topOffset = 40 // transport bar height in px
+const topOffset = 40 // transport-bar height in px
 
-/* ─────────────── data types ───────────────────────────────────────────── */
+/* ───────────────────────── data types ───────────────────────── */
 
 type uiNode struct {
 	ID       model.NodeID
@@ -23,39 +23,36 @@ type uiNode struct {
 	Start    bool
 }
 
+type uiEdge struct{ A, B *uiNode }
 
+type dragLink struct {
+	from     *uiNode
+	toX, toY float64
+	active   bool
+}
 
-	prevPlaying bool
-	winW, winH  int
-	start       *uiNode
-// nodeScreenRect returns the on-screen rectangle of a node under the current
-// camera transform (coordinates include the transport-bar offset).
-	stepPx := StepPixels(g.cam.Scale) // grid step in *screen* pixels
-	camScale := float64(stepPx) / float64(GridStep)
+type pulse struct {
+	x1, y1, x2, y2 float64
+	t, speed       float64
+}
 
-
-	sx := offX + float64(stepPx*n.I)             // sprite centre (screen x)
-	sy := offY + float64(stepPx*n.J) + topOffset // sprite centre (screen y)
-	size := float64(NodeSpriteSize) * camScale   // sprite edge length
-
-	x1, y1 = sx-half, sy-half
-	x2, y2 = sx+half, sy+half
-	// subsystems
+type Game struct {
+	/* subsystems */
 	cam   *Camera
 	split *Splitter
 	drum  *DrumView
 	graph *model.Graph
 	sched *beat.Scheduler
 
-	// graph
+	/* graph data */
 	nodes []*uiNode
 	edges []uiEdge
 
-	// visuals
+	/* visuals */
 	pulses []*pulse
 	frame  int
 
-	// editor state
+	/* editor state */
 	sel            *uiNode
 	linkDrag       dragLink
 	camDragging    bool
@@ -64,67 +61,132 @@ type uiNode struct {
 	pendingClick   bool
 	clickI, clickJ int
 
+	/* misc */
 	prevPlaying bool
 	winW, winH  int
-	start       *uiNode
+	start       *uiNode // explicit “root/start” node (⇧S to set)
 }
 
-// nodeScreenRect returns the on-screen rectangle of a node under the current
-// camera transform (coordinates include the transport-bar offset).
+/* ───────────────── helper: node’s screen rect ───────────────── */
+
+// Rectangle in *screen* pixels (y already includes the transport offset).
 func (g *Game) nodeScreenRect(n *uiNode) (x1, y1, x2, y2 float64) {
-	stepPx := StepPixels(g.cam.Scale)            // grid step in *screen* pixels
-	camScale := float64(stepPx) / float64(GridStep)
+	stepPx   := StepPixels(g.cam.Scale)                  // grid step in screen px
+	camScale := float64(stepPx) / float64(GridStep)      // world→screen factor
+	offX     := math.Round(g.cam.OffsetX)                // camera panning
+	offY     := math.Round(g.cam.OffsetY)
 
-	offX := math.Round(g.cam.OffsetX)
-	offY := math.Round(g.cam.OffsetY)
-
-	sx := offX + float64(stepPx*n.I)                   // sprite centre (screen x)
-	sy := offY + float64(stepPx*n.J) + topOffset       // sprite centre (screen y)
-	size := float64(NodeSpriteSize) * camScale         // sprite edge length
+	sx   := offX + float64(stepPx*n.I)                   // sprite centre X
+	sy   := offY + float64(stepPx*n.J) + topOffset       // sprite centre Y
+	size := float64(NodeSpriteSize) * camScale
 	half := size / 2
 
-	x1, y1 = sx-half, sy-half
-	x2, y2 = sx+half, sy+half
-	return
+	return sx - half, sy - half, sx + half, sy + half
 }
 
-/* ─────────────── constructor & layout ─────────────────────────────────── */
+/* ───────────────────── constructor & layout ─────────────────── */
 
 func New() *Game {
 	g := &Game{cam: NewCamera()}
-	log.Print("[game] init")
+
 	g.graph = model.NewGraph()
 	g.sched = beat.NewScheduler(g.graph)
-	g.split = NewSplitter(720) // temporary; real height set in Layout
+	g.split = NewSplitter(720) // real height set in Layout below
+
+	// bottom drum-machine view
 	g.drum = NewDrumView(image.Rect(0, g.split.Y, 1280, 720))
-	g.drum.Rows = []*DrumRow{
-		{Name: "H"},
-		{Name: "S"},
-	}
+	g.drum.Rows = []*DrumRow{{Name: "H"}, {Name: "S"}}
 	g.drum.Rows[0].Steps = g.graph.Row
 	g.drum.Rows[1].Steps = make([]bool, len(g.graph.Row))
-	g.sched.OnBeat = func(i int) { g.onBeat(i) }
+
+	g.sched.OnBeat = g.onBeat
 	return g
 }
 
 func (g *Game) Layout(w, h int) (int, int) {
 	g.winW, g.winH = w, h
-	// update splitter + drum bounds
+
+	/* update splitter and drum bounds */
 	if g.split == nil {
 		g.split = NewSplitter(h)
-	} else {
-	n := &uiNode{ID: id, I: i, J: j, X: x, Y: y}
-	if g.start == nil {
-		g.start = n
-		n.Start = true
+	}
+	if g.split.ratio == 0 { // first time → store ratio
+		g.split.ratio = float64(g.split.Y) / float64(h)
+	}
+	g.split.Y = int(float64(h) * g.split.ratio)
+	g.drum.SetBounds(image.Rect(0, g.split.Y, w, h))
+	return w, h
+}
+
+/* ─────────────────────── graph helpers ─────────────────────── */
+
+func (g *Game) nodeAt(i, j int) *uiNode {
+	for _, n := range g.nodes {
+		if n.I == i && n.J == j {
+			return n
+		}
+	}
+	return nil
+}
+
+func (g *Game) tryAddNode(i, j int) *uiNode {
+	if n := g.nodeAt(i, j); n != nil {
+		return n
+	}
+	id := g.graph.AddNode(i, j)
+	n  := &uiNode{ID: id, I: i, J: j, X: float64(i * GridStep), Y: float64(j * GridStep)}
+
+	if g.start == nil { // first ever node becomes the start
+		g.start  = n
+		n.Start  = true
 	}
 	g.nodes = append(g.nodes, n)
 	g.drum.Rows[0].Steps = g.graph.Row
 	return n
 }
 
+func (g *Game) deleteNode(n *uiNode) {
+	/* remove from slice */
+	for idx, v := range g.nodes {
+		if v == n {
+			g.nodes = append(g.nodes[:idx], g.nodes[idx+1:]...)
+			break
+		}
+	}
+	/* drop touching edges */
+	out := g.edges[:0]
+	for _, e := range g.edges {
+		if e.A != n && e.B != n {
+			out = append(out, e)
+		}
+	}
+	g.edges = out
+
+	g.graph.RemoveNode(n.ID)
+	g.drum.Rows[0].Steps = g.graph.Row
+
+	if g.sel == n {
+		g.sel = nil
+	}
+	if g.start == n {
+		g.start = nil
+	}
+}
+
+func (g *Game) addEdge(a, b *uiNode) {
+	if !(a.I == b.I || a.J == b.J) { // only orthogonal
+		return
+	}
+	for _, e := range g.edges { // no duplicates
+		if (e.A == a && e.B == b) || (e.A == b && e.B == a) {
+			return
+		}
+	}
 	g.edges = append(g.edges, uiEdge{a, b})
 	g.graph.Edges[[2]model.NodeID{a.ID, b.ID}] = struct{}{}
+}
+
+func (g *Game) deleteEdge(a, b *uiNode) {
 	for i := 0; i < len(g.edges); {
 		e := g.edges[i]
 		if (e.A == a && e.B == b) || (e.A == b && e.B == a) {
@@ -136,72 +198,6 @@ func (g *Game) Layout(w, h int) (int, int) {
 	}
 	delete(g.graph.Edges, [2]model.NodeID{a.ID, b.ID})
 	delete(g.graph.Edges, [2]model.NodeID{b.ID, a.ID})
-	if !left && g.leftPrev {
-		if g.pendingClick && !g.camDragged && !shift && !right && !g.linkDrag.active {
-			n := g.tryAddNode(g.clickI, g.clickJ)
-			log.Printf("[game] add/select node %d,%d", g.clickI, g.clickJ)
-			if g.sel != nil {
-				g.sel.Selected = false
-			}
-			g.sel = n
-			n.Selected = true
-		}
-		g.pendingClick = false
-		g.camDragged = false
-	}
-	if isKeyPressed(ebiten.KeyS) && g.sel != nil {
-		if g.start != nil {
-			g.start.Start = false
-		}
-		g.start = g.sel
-		g.start.Start = true
-	}
-	g.leftPrev = left
-		}
-	}
-	// prune edges touching it
-	keep := g.edges[:0]
-	for _, e := range g.edges {
-		if e.A != n && e.B != n {
-			keep = append(keep, e)
-		}
-	}
-	g.edges = keep
-	g.graph.RemoveNode(n.ID)
-	g.drum.Rows[0].Steps = g.graph.Row
-	if g.sel == n {
-		g.sel.Selected = false
-		g.sel = nil
-	}
-}
-
-func (g *Game) addEdge(a, b *uiNode) {
-	// 1. only horizontal OR vertical
-	if !(a.I == b.I || a.J == b.J) {
-		return // diagonals ignored
-	}
-	// 2. block duplicates
-	for _, e := range g.edges {
-		if (e.A == a && e.B == b) || (e.A == b && e.B == a) {
-			return
-		}
-	}
-       g.edges = append(g.edges, uiEdge{a, b})
-       g.graph.Edges[[2]model.NodeID{a.ID, b.ID}] = struct{}{}
-}
-
-func (g *Game) deleteEdge(a, b *uiNode) {
-       for i := 0; i < len(g.edges); {
-               e := g.edges[i]
-               if (e.A == a && e.B == b) || (e.A == b && e.B == a) {
-                       g.edges[i] = g.edges[len(g.edges)-1]
-                       g.edges = g.edges[:len(g.edges)-1]
-               } else {
-                       i++
-               }
-       }
-       delete(g.graph.Edges, [2]model.NodeID{a.ID, b.ID})
-       delete(g.graph.Edges, [2]model.NodeID{b.ID, a.ID})
 }
 
 /* ─────────────── input handling ───────────────────────────────────────── */
