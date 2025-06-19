@@ -51,3 +51,10 @@ To experiment with UI automation you can attempt to run the WASM build inside a
 headless browser. This requires a Chromium or Firefox binary. In this container
 the packages depend on `snapd` which is not available, so headless tests cannot
 run by default.
+
+## Git hooks
+Enable the optional pre-commit hook so every commit formats the code, runs the tests with the stubbed Ebiten module and builds the wasm binary:
+
+```sh
+git config core.hooksPath .githooks
+```
