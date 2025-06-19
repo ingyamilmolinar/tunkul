@@ -90,17 +90,19 @@ func TestClickAddsNode(t *testing.T) {
 	)
 	defer restore()
 
-	g.Update()
+	g.Update() // press
+	if g.nodeAt(0, 0) != nil {
+		t.Fatalf("node created before release")
+	}
+	pressed = false
+	g.Update() // release
 	n := g.nodeAt(0, 0)
 	if n == nil {
-		t.Fatalf("expected node created at (0,0)")
+		t.Fatalf("expected node created at (0,0) after release")
 	}
 	if !n.Selected || g.sel != n {
 		t.Fatalf("new node should be selected")
 	}
-
-	pressed = false
-	g.Update() // release
 	pressed = true
 	// click another position
 	restore2 := SetInputForTest(
@@ -112,7 +114,12 @@ func TestClickAddsNode(t *testing.T) {
 		func() (int, int) { return 640, 480 },
 	)
 	defer restore2()
-	g.Update()
+	g.Update() // press second node
+	if g.nodeAt(1, 0) != nil {
+		t.Fatalf("node created before release at second position")
+	}
+	pressed = false
+	g.Update() // release second node
 	n2 := g.nodeAt(1, 0)
 	if n2 == nil || !n2.Selected || g.sel != n2 || n.Selected {
 		t.Fatalf("selection did not move to new node")

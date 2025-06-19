@@ -51,10 +51,13 @@ type Game struct {
 	frame  int
 
 	// editor state
-	sel         *uiNode
-	linkDrag    dragLink
-	camDragging bool
-	winW, winH  int
+	sel            *uiNode
+	linkDrag       dragLink
+	camDragging    bool
+	leftPrev       bool
+	pendingClick   bool
+	clickI, clickJ int
+	winW, winH     int
 }
 
 // nodeScreenRect returns the screen-space rectangle of the given node under the
@@ -208,16 +211,24 @@ func (g *Game) handleEditor() {
 		return
 	}
 
-	// ---------------- plain left-click → add/select node ---------
-	if left && !shift && !right && !g.linkDrag.active && !g.camDragging {
-		n := g.tryAddNode(i, j)
-		log.Printf("[game] add/select node %d,%d", i, j)
-		if g.sel != nil {
-			g.sel.Selected = false
-		}
-		g.sel = n
-		n.Selected = true
+	// click handling based on press+release without drag
+	if left && !g.leftPrev {
+		g.clickI, g.clickJ = i, j
+		g.pendingClick = true
 	}
+	if !left && g.leftPrev {
+		if g.pendingClick && !g.camDragging && !shift && !right && !g.linkDrag.active {
+			n := g.tryAddNode(g.clickI, g.clickJ)
+			log.Printf("[game] add/select node %d,%d", g.clickI, g.clickJ)
+			if g.sel != nil {
+				g.sel.Selected = false
+			}
+			g.sel = n
+			n.Selected = true
+		}
+		g.pendingClick = false
+	}
+	g.leftPrev = left
 }
 
 func (g *Game) handleLinkDrag(left, right bool, gx, gy float64, i, j int) {
