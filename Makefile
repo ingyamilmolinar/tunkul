@@ -1,5 +1,11 @@
 WASM_OUT = ../js/main.wasm
 
+
+# compatibility aliases
+wasm: build-wasm
+
+serve: run-server
+
 wasm:
 	cd src/go && go mod download
 	cd src/go && GOOS=js GOARCH=wasm go build -o $(WASM_OUT) ./cmd/...

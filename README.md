@@ -18,7 +18,7 @@ If you want to build or run tests with the real Ebiten library, install the
 required system packages first. A helper script is provided:
 
 ```sh
-make dependencies
+`make wasm`.
 ```
 
 On macOS the script uses Homebrew, while on Linux it installs the necessary X11

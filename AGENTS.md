@@ -32,7 +32,7 @@ Tunkul is a grid-based beat sequencer written in Go with Ebiten. The program ren
 Key technologies:
 - Go 1.23
 - Ebiten for cross-platform rendering (stubbed for headless tests)
-
+- WASM build via `make wasm`
 ### Git hooks
 Run the following command once after cloning to ensure tests and the wasm build run before every commit:
 
@@ -40,7 +40,7 @@ Run the following command once after cloning to ensure tests and the wasm build 
 git config core.hooksPath .githooks
 ```
 
-The provided pre-commit hook formats code, runs `go test -tags test -modfile=go.test.mod ./...`, and runs `make all`.
+The provided pre-commit hook formats code, runs `go test -tags test -modfile=go.test.mod ./...`, and runs `make wasm`.
 - WASM build via `make wasm`
 
 Code structure:
