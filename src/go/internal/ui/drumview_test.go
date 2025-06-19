@@ -48,10 +48,6 @@ func TestRowHeightFillsPane(t *testing.T) {
 	want := dv.Bounds.Dy() / len(dv.Rows)
 	if dv.rowHeight() != want {
 		t.Fatalf("expected row height %d, got %d", want, dv.rowHeight())
-	dv.Update()
-	want := dv.Bounds.Dy() / len(dv.Rows)
-	if dv.rowHeight() != want {
-		t.Fatalf("row height changed to %d want %d", dv.rowHeight(), want)
 	}
 }
 

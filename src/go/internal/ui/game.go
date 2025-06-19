@@ -62,7 +62,6 @@ type Game struct {
 	clickI, clickJ int
 
 	/* misc */
-	prevPlaying bool
 	winW, winH  int
 	start       *uiNode // explicit “root/start” node (⇧S to set)
 }

@@ -10,4 +10,4 @@ cd src/go && go test -tags test -modfile=go.test.mod ./...
 cd ../..
 
 # Build wasm target
-make all
+make wasm
