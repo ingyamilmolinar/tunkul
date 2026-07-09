@@ -3,16 +3,33 @@
 package audio
 
 import (
+	"log"
+	"os"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/ebitengine/oto/v3"
+	"github.com/ingyamilmolinar/beatmo/internal/analyzer"
+	"github.com/ingyamilmolinar/beatmo/internal/scope"
+	"github.com/ingyamilmolinar/beatmo/internal/scopeexport"
 )
 
-const (
-	sampleRate          = 44100
-	bufferSizeBytes10ms = sampleRate / 100 * 2 // 10ms of 16-bit mono audio
-)
+// sampleRate is the audio output sample rate.
+// Default is 44100 Hz for maximum compatibility.
+// Override with AUDIO_SAMPLE_RATE environment variable.
+var sampleRate = func() int {
+	if s := os.Getenv("AUDIO_SAMPLE_RATE"); s != "" {
+		if rate, err := strconv.Atoi(s); err == nil && rate > 0 {
+			log.Printf("[AUDIO] Using custom sample rate: %d Hz", rate)
+			return rate
+		}
+	}
+	return 44100 // Default to 44100 for maximum compatibility
+}()
+
+// bufferSizeBytes10ms is 10ms of 16-bit mono audio
+var bufferSizeBytes10ms = sampleRate / 100 * 2
 
 var (
 	ctx   *oto.Context
@@ -24,12 +41,32 @@ var (
 	instruments = map[string]Instrument{}
 	instOrder   []string
 	instMu      sync.RWMutex
+
+	stopHookMu sync.RWMutex
+	stopHook   func(string)
+
+	analyzerSvc *analyzer.Service
+	scopeSvc    *scope.Service
+
+	exportSvc       *scopeexport.Service
+	scopeExportFlag bool
 )
 
 // Voice generates PCM samples in the range [-1,1].
 type Voice interface {
 	// Sample returns the next sample and whether the voice has finished.
 	Sample() (float64, bool)
+}
+
+// BlockVoice is an optional interface for voices that support bulk sample
+// rendering. When a voice implements BlockVoice, the mixer uses SampleBlock
+// instead of calling Sample() in a tight loop, reducing per-sample function
+// call overhead.
+type BlockVoice interface {
+	Voice
+	// SampleBlock fills dst with up to len(dst) samples and returns the
+	// number of samples written and whether the voice is done.
+	SampleBlock(dst []float64) (int, bool)
 }
 
 // Instrument constructs a new Voice instance when triggered.
@@ -39,13 +76,56 @@ type Instrument interface {
 
 // Register makes an instrument available for playback by ID.
 func Register(id string, inst Instrument) {
+	created := false
 	instMu.Lock()
 	if _, exists := instruments[id]; !exists {
 		instOrder = append(instOrder, id)
+		created = true
 	}
 	instruments[id] = inst
 	instMu.Unlock()
+	if created {
+		bumpInstrumentsVersion()
+	}
+	InstrumentChannel(id)
 }
+
+// Unregister removes a runtime-registered instrument from the playable set. It
+// is the inverse of Register, used by DeleteInstrument to drop a cloned/user
+// instrument. Removing an id that isn't registered is a no-op.
+func Unregister(id string) {
+	instMu.Lock()
+	_, existed := instruments[id]
+	if existed {
+		delete(instruments, id)
+		out := instOrder[:0]
+		for _, x := range instOrder {
+			if x != id {
+				out = append(out, x)
+			}
+		}
+		instOrder = out
+	}
+	instMu.Unlock()
+	if existed {
+		bumpInstrumentsVersion()
+	}
+}
+
+// AnalyzerService returns the global analyzer service, or nil if audio
+// has not been initialized (e.g. in test/WASM builds).
+func AnalyzerService() *analyzer.Service { return analyzerSvc }
+
+// ScopeService returns the global scope service, or nil if audio
+// has not been initialized (e.g. in test/WASM builds).
+func ScopeService() *scope.Service { return scopeSvc }
+
+// ExportService returns the global scope export service, or nil if
+// export is not enabled.
+func ExportService() *scopeexport.Service { return exportSvc }
+
+// EnableScopeExport enables scope export on the next audio init.
+func EnableScopeExport() { scopeExportFlag = true }
 
 func init() {
 	ResetInstruments()
@@ -58,180 +138,82 @@ func initContext() {
 	}
 	ctx = c
 	mix = newMixer(c)
-}
+	// Initialize send effects (delay + reverb).
+	initSendEffects(sampleRate)
+	// Initialize insert effect chains with the correct sample rate.
+	InitInsertChains(sampleRate)
+	// Install master compressor for automatic gain management.
+	SetupMasterCompressor(sampleRate)
+	// Phase 2 audio-panel redesign: stand up the master LUFS integrator
+	// before the analyzer service so MasterLUFSGetter has something to
+	// read on the first tick. The integrator is fed from the mixer
+	// master push site (engine_stop.go) via FeedMasterLUFS.
+	EnsureMasterLUFS(float64(sampleRate))
+	// Start the analyzer service for real-time metering and FFT.
+	analyzerSvc = analyzer.NewService(analyzer.Config{
+		FFTSize:               1024,
+		WindowSize:            2048,
+		MaxInstruments:        32,
+		SampleRate:            sampleRate,
+		MasterLUFSGetter:      MasterLUFSShortTerm,
+		ClipsLastWindowGetter: ClipsLastWindow,
+	})
+	go analyzerSvc.Run()
+	// Start the scope service for real-time A/B pipeline comparison.
+	scopeSvc = scope.NewService(scope.Config{
+		MaxWindowMs: 500,
+		SampleRate:  sampleRate,
+	})
+	go scopeSvc.Run()
 
-// Play schedules an instrument by ID at an optional future time.
-func Play(id string, when ...float64) {
-	instMu.RLock()
-	inst, ok := instruments[id]
-	instMu.RUnlock()
-	if !ok {
-		return
-	}
-	once.Do(initContext)
-	if ctx == nil {
-		return
-	}
-	_ = ctx.Resume()
-	delay := 0
-	if len(when) > 0 {
-		d := when[0] - Now()
-		if d > 0 {
-			delay = int(d * sampleRate)
-		}
-	}
-	mix.Schedule(inst.NewVoice(bpm, sampleRate), delay)
-}
-
-// PlayVol schedules an instrument by ID at the given volume (0..1) and
-// optional future time.
-func PlayVol(id string, vol float64, when ...float64) {
-	instMu.RLock()
-	inst, ok := instruments[id]
-	instMu.RUnlock()
-	if !ok {
-		return
-	}
-	once.Do(initContext)
-	if ctx == nil {
-		return
-	}
-	_ = ctx.Resume()
-	delay := 0
-	if len(when) > 0 {
-		d := when[0] - Now()
-		if d > 0 {
-			delay = int(d * sampleRate)
-		}
-	}
-	mix.Schedule(&scaledVoice{v: inst.NewVoice(bpm, sampleRate), gain: vol}, delay)
-}
-
-// ResetInstruments restores the built-in instrument set.
-func ResetInstruments() {
-	instMu.Lock()
-	instruments = map[string]Instrument{
-		"snare": Snare{},
-		"kick":  Kick{},
-		"hihat": HiHat{},
-		"tom":   Tom{},
-		"clap":  Clap{},
-	}
-	instOrder = []string{"snare", "kick", "hihat", "tom", "clap"}
-	instMu.Unlock()
-}
-
-type scaledVoice struct {
-	v    Voice
-	gain float64
-}
-
-func (s *scaledVoice) Sample() (float64, bool) {
-	f, done := s.v.Sample()
-	return f * s.gain, done
-}
-
-// Now returns seconds since program start.
-func Now() float64 { return time.Since(start).Seconds() }
-
-// Reset closes the current audio context so queued sounds are dropped.
-func Reset() {
-	ctx = nil
-	mix = nil
-	once = sync.Once{}
-}
-
-// Resume attempts to resume the underlying audio context.
-func Resume() {
-	once.Do(initContext)
-	if ctx != nil {
-		_ = ctx.Resume()
-	}
-}
-
-// SetBPM updates the global tempo used when constructing new voices.
-func SetBPM(b int) { bpm = b }
-
-// Instruments returns the list of registered instrument IDs.
-func Instruments() []string {
-	instMu.RLock()
-	ids := append([]string(nil), instOrder...)
-	instMu.RUnlock()
-	return ids
-}
-
-// RenameInstrument updates the ID of an existing instrument.
-func RenameInstrument(oldID, newID string) {
-	instMu.Lock()
-	if inst, ok := instruments[oldID]; ok {
-		delete(instruments, oldID)
-		instruments[newID] = inst
-		for i, id := range instOrder {
-			if id == oldID {
-				instOrder[i] = newID
-				break
+	// Optionally start the scope export flight recorder.
+	if scopeExportFlag || os.Getenv("SCOPE_EXPORT") == "1" {
+		interval := 2 * time.Second
+		if v := os.Getenv("SCOPE_EXPORT_INTERVAL"); v != "" {
+			if secs, err := strconv.ParseFloat(v, 64); err == nil && secs > 0 {
+				interval = time.Duration(secs * float64(time.Second))
 			}
 		}
-	}
-	instMu.Unlock()
-}
-
-// mixer mixes multiple voices into a single PCM stream.
-type mixer struct {
-	mu     sync.Mutex
-	voices []*voiceState
-	pos    int
-	player *oto.Player
-}
-
-type voiceState struct {
-	start int
-	v     Voice
-}
-
-func newMixer(c *oto.Context) *mixer {
-	m := &mixer{}
-	p := c.NewPlayer(m)
-	p.SetBufferSize(bufferSizeBytes10ms)
-	p.Play()
-	m.player = p
-	return m
-}
-
-// Schedule adds a voice to start after delaySamples have elapsed.
-func (m *mixer) Schedule(v Voice, delaySamples int) {
-	m.mu.Lock()
-	m.voices = append(m.voices, &voiceState{start: m.pos + delaySamples, v: v})
-	m.mu.Unlock()
-}
-
-// Read implements io.Reader for oto.Player.
-func (m *mixer) Read(p []byte) (int, error) {
-	samples := len(p) / 2
-	for i := 0; i < samples; i++ {
-		var sum float64
-		m.mu.Lock()
-		for idx := 0; idx < len(m.voices); idx++ {
-			vs := m.voices[idx]
-			if m.pos >= vs.start {
-				val, done := vs.v.Sample()
-				sum += val
-				if done {
-					m.voices = append(m.voices[:idx], m.voices[idx+1:]...)
-					idx--
+		path := "scope_export.jsonl"
+		if v := os.Getenv("SCOPE_EXPORT_PATH"); v != "" {
+			path = v
+		}
+		exportSvc = scopeexport.NewService(scopeexport.Config{
+			SampleRate: sampleRate,
+			Interval:   interval,
+			OutputPath: path,
+			BPMFunc:    func() int { return bpm },
+			InstrumentsFunc: func() []string {
+				instMu.RLock()
+				defer instMu.RUnlock()
+				return append([]string{}, instOrder...)
+			},
+			LookupMeta: func(id string) (string, string, bool) {
+				m, ok := CatalogLookup(id)
+				if !ok {
+					return "", "", false
 				}
-			}
-		}
-		m.mu.Unlock()
-		if sum > 1 {
-			sum = 1
-		} else if sum < -1 {
-			sum = -1
-		}
-		v := int16(sum * 32767)
-		p[2*i] = byte(v)
-		p[2*i+1] = byte(v >> 8)
-		m.pos++
+				return m.Name, m.Source, ok
+			},
+			ChannelVolume: ChannelVolume,
+			ChannelPan:    ChannelPan,
+			MainVolume:    MainVolume,
+		})
+		exportSvc.Start()
 	}
-	return len(p), nil
+}
+
+// Close stops the audio player, clears all voices, and releases the audio
+// device. Safe to call when mix is nil (e.g. audio was never initialized).
+func Close() {
+	if mix == nil {
+		return
+	}
+	mix.mu.Lock()
+	mix.voices = nil
+	mix.mu.Unlock()
+	if mix.player != nil {
+		mix.player.Pause()
+		mix.player.Close()
+	}
 }

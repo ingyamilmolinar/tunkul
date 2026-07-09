@@ -7,7 +7,9 @@ import (
 )
 
 func TestTransportSetBPMClamp(t *testing.T) {
+	assertDefaultParityState(t)
 	tr := NewTransport(200)
+	tr.SetBPM(200)
 	tr.SetBPM(maxBPM + 500)
 	if tr.BPM != maxBPM {
 		t.Fatalf("BPM not clamped: %d", tr.BPM)
@@ -15,18 +17,20 @@ func TestTransportSetBPMClamp(t *testing.T) {
 	if tr.bpmErrorAnim == 0 {
 		t.Errorf("expected error animation on high bpm")
 	}
-	tr.bpmErrorAnim = 0
-	tr.SetBPM(0)
-	if tr.BPM != 1 {
-		t.Fatalf("low BPM not clamped: %d", tr.BPM)
+	trLow := NewTransport(200)
+	trLow.SetBPM(0)
+	if trLow.BPM != 1 {
+		t.Fatalf("low BPM not clamped: %d", trLow.BPM)
 	}
-	if tr.bpmErrorAnim == 0 {
+	if trLow.bpmErrorAnim == 0 {
 		t.Errorf("expected error animation on low bpm")
 	}
 }
 
 func TestTransportBPMTextInput(t *testing.T) {
+	assertDefaultParityState(t)
 	tr := NewTransport(200)
+	tr.SetBPM(200)
 
 	cx, cy := tr.bpmBox.Rect.Min.X+1, tr.bpmBox.Rect.Min.Y+1
 	pressed := true
@@ -51,6 +55,10 @@ func TestTransportBPMTextInput(t *testing.T) {
 	chars = []rune{'0'}
 	tr.Update()
 
+	if tr.BPM != 200 {
+		t.Fatalf("BPM changed before commit: %d", tr.BPM)
+	}
+
 	// click outside to commit
 	pressed = true
 	cx, cy = 0, 0
@@ -58,5 +66,46 @@ func TestTransportBPMTextInput(t *testing.T) {
 
 	if tr.BPM != 500 {
 		t.Fatalf("expected BPM 500 got %d", tr.BPM)
+	}
+}
+
+func TestTransportBPMTextInputNonNumeric(t *testing.T) {
+	assertDefaultParityState(t)
+	tr := NewTransport(200)
+	tr.SetBPM(200)
+
+	cx, cy := tr.bpmBox.Rect.Min.X+1, tr.bpmBox.Rect.Min.Y+1
+	pressed := true
+	chars := []rune{}
+	restore := SetInputForTest(
+		func() (int, int) { return cx, cy },
+		func(ebiten.MouseButton) bool { return pressed },
+		func(ebiten.Key) bool { return false },
+		func() []rune { c := chars; chars = nil; return c },
+		func() (float64, float64) { return 0, 0 },
+		func() (int, int) { return 200, 200 },
+	)
+	defer restore()
+
+	tr.Update() // focus
+	pressed = false
+
+	chars = []rune{'a'}
+	tr.Update()
+
+	if tr.BPM != 200 {
+		t.Fatalf("BPM changed before commit: %d", tr.BPM)
+	}
+
+	// click outside to commit
+	pressed = true
+	cx, cy = 0, 0
+	tr.Update()
+
+	if tr.BPM != 200 {
+		t.Fatalf("expected BPM to remain 200 got %d", tr.BPM)
+	}
+	if tr.bpmErrorAnim == 0 {
+		t.Fatalf("expected error animation for invalid input")
 	}
 }

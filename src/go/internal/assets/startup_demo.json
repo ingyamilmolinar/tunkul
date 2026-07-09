@@ -1,0 +1,1206 @@
+{
+  "version": 1,
+  "subdiv": 8,
+  "bpm": 120,
+  "master_volume": 0.72,
+  "instruments": [
+    {
+      "name": "Dnb Kick",
+      "id": "dnb-kick",
+      "kind": "builtin",
+      "volume": 0.7,
+      "origin": 0,
+      "color": "#EE00DDFF",
+      "eq": {
+        "gains_db": [
+          1.1,
+          1.7,
+          -2.4,
+          -11.6,
+          -12,
+          0,
+          -0.8,
+          0,
+          0,
+          0
+        ],
+        "bands_hz": [
+          [
+            22,
+            44
+          ],
+          [
+            44,
+            88
+          ],
+          [
+            88,
+            177
+          ],
+          [
+            177,
+            354
+          ],
+          [
+            354,
+            707
+          ],
+          [
+            707,
+            1414
+          ],
+          [
+            1414,
+            2828
+          ],
+          [
+            2828,
+            5657
+          ],
+          [
+            5657,
+            11314
+          ],
+          [
+            11314,
+            20000
+          ]
+        ],
+        "hpf_cutoff_hz": 20,
+        "lpf_enabled": true,
+        "lpf_cutoff_hz": 1000
+      },
+      "recipe": "synth-modular-kick-dnb"
+    },
+    {
+      "name": "Snare",
+      "id": "snare",
+      "kind": "builtin",
+      "volume": 0.57,
+      "origin": 3,
+      "color": "#00C8E0FF",
+      "eq": {
+        "gains_db": [
+          -6,
+          -6,
+          -1,
+          -1,
+          -1.8,
+          1.7,
+          3.5,
+          3.9,
+          1.3,
+          -4
+        ],
+        "bands_hz": [
+          [
+            22,
+            44
+          ],
+          [
+            44,
+            88
+          ],
+          [
+            88,
+            177
+          ],
+          [
+            177,
+            354
+          ],
+          [
+            354,
+            707
+          ],
+          [
+            707,
+            1414
+          ],
+          [
+            1414,
+            2828
+          ],
+          [
+            2828,
+            5657
+          ],
+          [
+            5657,
+            11314
+          ],
+          [
+            11314,
+            20000
+          ]
+        ],
+        "hpf_enabled": true,
+        "hpf_cutoff_hz": 180,
+        "lpf_enabled": true,
+        "lpf_cutoff_hz": 8998.186611481351
+      },
+      "effects": [
+        {
+          "type": "distortion",
+          "enabled": true,
+          "params": {
+            "drive": 1.3,
+            "mix": 0.4,
+            "tone": 5000
+          }
+        }
+      ],
+      "reverb_send": 0.15,
+      "recipe": "drum-snare"
+    },
+    {
+      "name": "Hihat 1",
+      "id": "hihat-1",
+      "kind": "builtin",
+      "volume": 0.7,
+      "origin": 6,
+      "color": "#FFD319FF",
+      "eq": {
+        "gains_db": [
+          -6,
+          -6,
+          -6,
+          -3,
+          -1.6,
+          -3,
+          -0.9,
+          1.6,
+          5,
+          -0.2
+        ],
+        "bands_hz": [
+          [
+            22,
+            44
+          ],
+          [
+            44,
+            88
+          ],
+          [
+            88,
+            177
+          ],
+          [
+            177,
+            354
+          ],
+          [
+            354,
+            707
+          ],
+          [
+            707,
+            1414
+          ],
+          [
+            1414,
+            2828
+          ],
+          [
+            2828,
+            5657
+          ],
+          [
+            5657,
+            11314
+          ],
+          [
+            11314,
+            20000
+          ]
+        ],
+        "hpf_enabled": true,
+        "hpf_cutoff_hz": 343.70531311604617,
+        "lpf_cutoff_hz": 20000
+      },
+      "pan": 0.35,
+      "recipe": "drum-open-hihat"
+    },
+    {
+      "name": "Clap",
+      "id": "clap",
+      "kind": "builtin",
+      "volume": 0.48,
+      "origin": 13,
+      "color": "#A030FFFF",
+      "eq": {
+        "gains_db": [
+          -8,
+          -8,
+          -8,
+          -6,
+          -3,
+          -0.4,
+          2.1,
+          0.8,
+          1.5,
+          0.4
+        ],
+        "bands_hz": [
+          [
+            22,
+            44
+          ],
+          [
+            44,
+            88
+          ],
+          [
+            88,
+            177
+          ],
+          [
+            177,
+            354
+          ],
+          [
+            354,
+            707
+          ],
+          [
+            707,
+            1414
+          ],
+          [
+            1414,
+            2828
+          ],
+          [
+            2828,
+            5657
+          ],
+          [
+            5657,
+            11314
+          ],
+          [
+            11314,
+            20000
+          ]
+        ],
+        "hpf_enabled": true,
+        "hpf_cutoff_hz": 712.1844642805869,
+        "lpf_enabled": true,
+        "lpf_cutoff_hz": 16291.740941713846
+      },
+      "pan": -0.15,
+      "delay_send": 0.1,
+      "reverb_send": 0.25,
+      "recipe": "drum-clap"
+    },
+    {
+      "name": "Shaker",
+      "id": "shaker",
+      "kind": "builtin",
+      "volume": 0.12,
+      "origin": 20,
+      "color": "#3FD67AFF",
+      "eq": {
+        "gains_db": [
+          0,
+          0,
+          0,
+          -2,
+          3,
+          2.5,
+          3,
+          -0.7,
+          -0.3,
+          -0.1
+        ],
+        "bands_hz": [
+          [
+            22,
+            44
+          ],
+          [
+            44,
+            88
+          ],
+          [
+            88,
+            177
+          ],
+          [
+            177,
+            354
+          ],
+          [
+            354,
+            707
+          ],
+          [
+            707,
+            1414
+          ],
+          [
+            1414,
+            2828
+          ],
+          [
+            2828,
+            5657
+          ],
+          [
+            5657,
+            11314
+          ],
+          [
+            11314,
+            20000
+          ]
+        ],
+        "hpf_enabled": true,
+        "hpf_cutoff_hz": 341.855440295777,
+        "lpf_enabled": true,
+        "lpf_cutoff_hz": 4000
+      },
+      "pan": 0.45,
+      "reverb_send": 0.2,
+      "recipe": "drum-shaker"
+    },
+    {
+      "name": "Organ Church",
+      "id": "organ-church",
+      "kind": "builtin",
+      "volume": 0.37,
+      "origin": 46,
+      "color": "#3A6AF0FF",
+      "eq": {
+        "gains_db": [
+          -1.6,
+          0,
+          -2,
+          3,
+          3.5,
+          -0.1,
+          0,
+          0,
+          0,
+          0
+        ],
+        "bands_hz": [
+          [
+            22,
+            44
+          ],
+          [
+            44,
+            88
+          ],
+          [
+            88,
+            177
+          ],
+          [
+            177,
+            354
+          ],
+          [
+            354,
+            707
+          ],
+          [
+            707,
+            1414
+          ],
+          [
+            1414,
+            2828
+          ],
+          [
+            2828,
+            5657
+          ],
+          [
+            5657,
+            11314
+          ],
+          [
+            11314,
+            20000
+          ]
+        ],
+        "hpf_cutoff_hz": 20,
+        "lpf_cutoff_hz": 20000
+      },
+      "pan": -0.2,
+      "delay_send": 0.15,
+      "reverb_send": 0.3,
+      "recipe": "synth-modular-organ-church"
+    }
+  ],
+  "nodes": [
+    {
+      "id": 0,
+      "i": -16,
+      "j": -8,
+      "type": "regular",
+      "inputs": [
+        18
+      ],
+      "outputs": [
+        16
+      ]
+    },
+    {
+      "id": 1,
+      "i": -8,
+      "j": 0,
+      "type": "regular",
+      "inputs": [
+        9
+      ],
+      "outputs": [
+        2
+      ]
+    },
+    {
+      "id": 2,
+      "i": -16,
+      "j": 0,
+      "type": "regular",
+      "inputs": [
+        1
+      ],
+      "outputs": [
+        18
+      ],
+      "volume": 1.2
+    },
+    {
+      "id": 3,
+      "i": 0,
+      "j": -16,
+      "type": "regular",
+      "inputs": [
+        26
+      ],
+      "outputs": [
+        19
+      ],
+      "volume": 1.2
+    },
+    {
+      "id": 4,
+      "i": 16,
+      "j": -16,
+      "type": "regular",
+      "inputs": [
+        17
+      ],
+      "outputs": [
+        28
+      ],
+      "volume": 1.5
+    },
+    {
+      "id": 5,
+      "i": 16,
+      "j": 0,
+      "type": "regular",
+      "inputs": [
+        27
+      ],
+      "outputs": [
+        24
+      ],
+      "volume": 1.5
+    },
+    {
+      "id": 6,
+      "i": 8,
+      "j": 8,
+      "type": "regular",
+      "inputs": [
+        37
+      ],
+      "outputs": [
+        52
+      ]
+    },
+    {
+      "id": 7,
+      "i": -8,
+      "j": 8,
+      "type": "regular",
+      "inputs": [
+        39
+      ],
+      "outputs": [
+        40
+      ]
+    },
+    {
+      "id": 8,
+      "i": -24,
+      "j": 24,
+      "type": "regular",
+      "inputs": [
+        31
+      ],
+      "outputs": [
+        29
+      ]
+    },
+    {
+      "id": 9,
+      "i": -8,
+      "j": -8,
+      "type": "regular",
+      "inputs": [
+        15
+      ],
+      "outputs": [
+        1
+      ],
+      "volume": 1.5,
+      "pitch": 15,
+      "duration": 2.45
+    },
+    {
+      "id": 10,
+      "i": 0,
+      "j": 0,
+      "type": "regular",
+      "inputs": [
+        23
+      ],
+      "outputs": [
+        25
+      ],
+      "volume": 1.5
+    },
+    {
+      "id": 11,
+      "i": 12,
+      "j": 8,
+      "type": "regular",
+      "inputs": [
+        52
+      ],
+      "outputs": [
+        36
+      ],
+      "volume": 0.9999999999999992,
+      "groove_kind": "rush"
+    },
+    {
+      "id": 12,
+      "i": 8,
+      "j": 12,
+      "type": "regular",
+      "inputs": [
+        51
+      ],
+      "outputs": [
+        37
+      ],
+      "groove_kind": "delay",
+      "groove_pct": 1.3877787807814457e-17
+    },
+    {
+      "id": 13,
+      "i": -24,
+      "j": 8,
+      "type": "regular",
+      "inputs": [
+        21
+      ],
+      "outputs": [
+        39
+      ]
+    },
+    {
+      "id": 14,
+      "i": -8,
+      "j": 24,
+      "type": "regular",
+      "inputs": [
+        32
+      ],
+      "outputs": [
+        38
+      ]
+    },
+    {
+      "id": 15,
+      "i": -10,
+      "j": -8,
+      "type": "regular",
+      "inputs": [
+        16
+      ],
+      "outputs": [
+        9
+      ],
+      "volume": 1.2
+    },
+    {
+      "id": 16,
+      "i": -12,
+      "j": -8,
+      "type": "regular",
+      "inputs": [
+        0
+      ],
+      "outputs": [
+        15
+      ],
+      "volume": 1.2,
+      "pitch": 6,
+      "duration": 0.8
+    },
+    {
+      "id": 17,
+      "i": 14,
+      "j": -16,
+      "type": "regular",
+      "inputs": [
+        22
+      ],
+      "outputs": [
+        4
+      ],
+      "volume": 1.2
+    },
+    {
+      "id": 18,
+      "i": -16,
+      "j": -2,
+      "type": "regular",
+      "inputs": [
+        2
+      ],
+      "outputs": [
+        0
+      ],
+      "volume": 1.2,
+      "pitch": -2,
+      "duration": 0.8
+    },
+    {
+      "id": 19,
+      "i": 2,
+      "j": -16,
+      "type": "regular",
+      "inputs": [
+        3
+      ],
+      "outputs": [
+        22
+      ],
+      "volume": 1.2
+    },
+    {
+      "id": 20,
+      "i": -33,
+      "j": -1,
+      "type": "regular",
+      "inputs": [
+        48
+      ],
+      "outputs": [
+        48
+      ],
+      "pitch": -6,
+      "duration": 0.7000000000000001,
+      "logic_kind": "skip_every_n",
+      "logic_n": 8,
+      "logic_p": 0.9999999999999999,
+      "groove_kind": "rush"
+    },
+    {
+      "id": 21,
+      "i": -24,
+      "j": 10,
+      "type": "regular",
+      "inputs": [
+        30
+      ],
+      "outputs": [
+        13
+      ]
+    },
+    {
+      "id": 22,
+      "i": 8,
+      "j": -16,
+      "type": "regular",
+      "inputs": [
+        19
+      ],
+      "outputs": [
+        17
+      ]
+    },
+    {
+      "id": 23,
+      "i": 8,
+      "j": 0,
+      "type": "regular",
+      "inputs": [
+        24
+      ],
+      "outputs": [
+        10
+      ]
+    },
+    {
+      "id": 24,
+      "i": 14,
+      "j": 0,
+      "type": "regular",
+      "inputs": [
+        5
+      ],
+      "outputs": [
+        23
+      ]
+    },
+    {
+      "id": 25,
+      "i": 0,
+      "j": -4,
+      "type": "regular",
+      "inputs": [
+        10
+      ],
+      "outputs": [
+        26
+      ],
+      "volume": 0.3,
+      "logic_kind": "probability",
+      "logic_p": 0.3
+    },
+    {
+      "id": 26,
+      "i": 0,
+      "j": -6,
+      "type": "regular",
+      "inputs": [
+        25
+      ],
+      "outputs": [
+        3
+      ]
+    },
+    {
+      "id": 27,
+      "i": 16,
+      "j": -4,
+      "type": "regular",
+      "inputs": [
+        28
+      ],
+      "outputs": [
+        5
+      ]
+    },
+    {
+      "id": 28,
+      "i": 16,
+      "j": -10,
+      "type": "regular",
+      "inputs": [
+        4
+      ],
+      "outputs": [
+        27
+      ]
+    },
+    {
+      "id": 29,
+      "i": -24,
+      "j": 20,
+      "type": "regular",
+      "inputs": [
+        8
+      ],
+      "outputs": [
+        30
+      ]
+    },
+    {
+      "id": 30,
+      "i": -24,
+      "j": 18,
+      "type": "regular",
+      "inputs": [
+        29
+      ],
+      "outputs": [
+        21
+      ]
+    },
+    {
+      "id": 31,
+      "i": -22,
+      "j": 24,
+      "type": "regular",
+      "inputs": [
+        42
+      ],
+      "outputs": [
+        8
+      ]
+    },
+    {
+      "id": 32,
+      "i": -8,
+      "j": 20,
+      "type": "regular",
+      "inputs": [
+        33
+      ],
+      "outputs": [
+        14
+      ],
+      "logic_kind": "skip_every_n",
+      "logic_n": 2
+    },
+    {
+      "id": 33,
+      "i": -8,
+      "j": 16,
+      "type": "regular",
+      "inputs": [
+        40
+      ],
+      "outputs": [
+        32
+      ]
+    },
+    {
+      "id": 34,
+      "i": 12,
+      "j": 12,
+      "type": "regular",
+      "inputs": [
+        36
+      ],
+      "outputs": [
+        35
+      ]
+    },
+    {
+      "id": 35,
+      "i": 10,
+      "j": 12,
+      "type": "regular",
+      "inputs": [
+        34
+      ],
+      "outputs": [
+        51
+      ]
+    },
+    {
+      "id": 36,
+      "i": 12,
+      "j": 10,
+      "type": "regular",
+      "inputs": [
+        11
+      ],
+      "outputs": [
+        34
+      ],
+      "groove_kind": "delay"
+    },
+    {
+      "id": 37,
+      "i": 8,
+      "j": 10,
+      "type": "regular",
+      "inputs": [
+        12
+      ],
+      "outputs": [
+        6
+      ],
+      "logic_kind": "every_n_triggers",
+      "logic_n": 2,
+      "groove_kind": "delay",
+      "groove_pct": 0.25
+    },
+    {
+      "id": 38,
+      "i": -12,
+      "j": 24,
+      "type": "regular",
+      "inputs": [
+        14
+      ],
+      "outputs": [
+        41
+      ],
+      "logic_kind": "every_n_triggers",
+      "logic_n": 2
+    },
+    {
+      "id": 39,
+      "i": -10,
+      "j": 8,
+      "type": "regular",
+      "inputs": [
+        13
+      ],
+      "outputs": [
+        7
+      ]
+    },
+    {
+      "id": 40,
+      "i": -8,
+      "j": 12,
+      "type": "regular",
+      "inputs": [
+        7
+      ],
+      "outputs": [
+        33
+      ]
+    },
+    {
+      "id": 41,
+      "i": -14,
+      "j": 24,
+      "type": "regular",
+      "inputs": [
+        38
+      ],
+      "outputs": [
+        42
+      ],
+      "logic_kind": "every_n_triggers",
+      "logic_n": 2
+    },
+    {
+      "id": 42,
+      "i": -18,
+      "j": 24,
+      "type": "regular",
+      "inputs": [
+        41
+      ],
+      "outputs": [
+        31
+      ],
+      "logic_kind": "skip_every_n",
+      "logic_n": 2
+    },
+    {
+      "id": 43,
+      "i": -40,
+      "j": -8,
+      "type": "regular",
+      "inputs": [
+        49
+      ],
+      "outputs": [
+        50
+      ],
+      "pitch": -2,
+      "duration": 0.40000000000000013
+    },
+    {
+      "id": 44,
+      "i": -32,
+      "j": -8,
+      "type": "regular",
+      "inputs": [
+        47
+      ],
+      "outputs": [
+        49
+      ],
+      "duration": 0.5000000000000001
+    },
+    {
+      "id": 45,
+      "i": -32,
+      "j": -16,
+      "type": "regular",
+      "inputs": [
+        46
+      ],
+      "outputs": [
+        47
+      ],
+      "pitch": 5,
+      "duration": 0.8
+    },
+    {
+      "id": 46,
+      "i": -40,
+      "j": -16,
+      "type": "regular",
+      "inputs": [
+        50
+      ],
+      "outputs": [
+        45
+      ]
+    },
+    {
+      "id": 47,
+      "i": -32,
+      "j": -14,
+      "type": "regular",
+      "inputs": [
+        45
+      ],
+      "outputs": [
+        44
+      ],
+      "duration": 0.40000000000000013
+    },
+    {
+      "id": 48,
+      "i": -31,
+      "j": -1,
+      "type": "regular",
+      "inputs": [
+        20
+      ],
+      "outputs": [
+        20
+      ],
+      "logic_kind": "skip_every_n",
+      "logic_n": 4,
+      "groove_kind": "delay",
+      "groove_pct": 0.7000000000000001
+    },
+    {
+      "id": 49,
+      "i": -36,
+      "j": -8,
+      "type": "regular",
+      "inputs": [
+        44
+      ],
+      "outputs": [
+        43
+      ],
+      "duration": 1.5000000000000004
+    },
+    {
+      "id": 50,
+      "i": -40,
+      "j": -12,
+      "type": "regular",
+      "inputs": [
+        43
+      ],
+      "outputs": [
+        46
+      ],
+      "duration": 0.9
+    },
+    {
+      "id": 51,
+      "i": 9,
+      "j": 12,
+      "type": "regular",
+      "inputs": [
+        35
+      ],
+      "outputs": [
+        12
+      ],
+      "groove_kind": "rush",
+      "groove_pct": 0.25
+    },
+    {
+      "id": 52,
+      "i": 10,
+      "j": 8,
+      "type": "regular",
+      "inputs": [
+        6
+      ],
+      "outputs": [
+        11
+      ],
+      "logic_kind": "every_n_triggers",
+      "logic_n": 2
+    }
+  ],
+  "eq": {
+    "gains_db": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "bands_hz": [
+      [
+        22,
+        44
+      ],
+      [
+        44,
+        88
+      ],
+      [
+        88,
+        177
+      ],
+      [
+        177,
+        354
+      ],
+      [
+        354,
+        707
+      ],
+      [
+        707,
+        1414
+      ],
+      [
+        1414,
+        2828
+      ],
+      [
+        2828,
+        5657
+      ],
+      [
+        5657,
+        11314
+      ],
+      [
+        11314,
+        20000
+      ]
+    ],
+    "hpf_cutoff_hz": 20,
+    "lpf_cutoff_hz": 20000
+  },
+  "send_effects": {
+    "delay": {
+      "time_ms": 300,
+      "feedback": 0.3,
+      "damping_hz": 3000
+    },
+    "reverb": {
+      "room": 0.7,
+      "damping": 0.4,
+      "wet": 0.3
+    }
+  }
+}
