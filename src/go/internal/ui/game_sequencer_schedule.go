@@ -335,7 +335,7 @@ func (g *Game) seqScheduleTime() {
 						// what was dispatched, and mark the decision enqueued to keep the
 						// Audible⟹Enqueued invariant honest on this path too.
 						g.markSeqAudioEnqueued(row, idx)
-						g.recordParityAudio(row, idx, audio.Now(), inst, vol, pitch, dur, g.audioGen.Load())
+						g.recordParityAudio(row, idx, audio.Now(), inst, vol, pitch, dur, g.audioGen.Load(), g.parityGen.Load())
 					} else {
 						// Ideal audio time for this beat: anchored to
 						// audioStart + beat's position on the timeline.

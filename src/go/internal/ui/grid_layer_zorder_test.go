@@ -32,9 +32,11 @@ func TestGridLayerZOrder(t *testing.T) {
 		{"grid-coord-badge", GZCoordBadge},
 		{"grid-move-mode", GZMoveMode},
 		{"grid-connect-mode", GZConnectMode},
+		{"grid-marquee", GZMarquee},
 		{"grid-longpress", GZLongPress},
 		{"grid-move-confirm", GZMoveConfirm},
 		{"grid-sidebar", GZSidebar},
+		{"grid-group-menu", GZGroupMenu},
 		{"grid-cursor-label", GZCursorLabel},
 		{"grid-help-button", GZGridHelpButton},
 	}

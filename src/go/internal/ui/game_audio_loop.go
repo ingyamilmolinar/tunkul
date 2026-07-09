@@ -143,9 +143,9 @@ func (g *Game) audioLoop() {
 
 			// Record parity only for audio that actually passes the final dispatch boundary.
 			if req.hasWhen {
-				g.recordParityAudio(req.row, req.abs, req.when, req.id, req.vol, req.pitch, req.dur, req.gen)
+				g.recordParityAudio(req.row, req.abs, req.when, req.id, req.vol, req.pitch, req.dur, req.gen, req.parityGen)
 			} else {
-				g.recordParityAudio(req.row, req.abs, audio.Now(), req.id, req.vol, req.pitch, req.dur, req.gen)
+				g.recordParityAudio(req.row, req.abs, audio.Now(), req.id, req.vol, req.pitch, req.dur, req.gen, req.parityGen)
 			}
 
 			b := audio.BatchParam{ID: req.id, Vol: req.vol, Pitch: req.pitch, Dur: req.dur}

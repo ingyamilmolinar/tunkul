@@ -27,7 +27,7 @@ func (g *Game) queueSoundParams(id string, vol, pitch, dur float64) {
 	if vol < 0 {
 		vol = 0
 	}
-	req := soundReq{id: id, vol: vol, pitch: pitch, dur: dur, enqAt: time.Now(), gen: g.audioGen.Load(), row: -1, abs: -1}
+	req := soundReq{id: id, vol: vol, pitch: pitch, dur: dur, enqAt: time.Now(), gen: g.audioGen.Load(), parityGen: g.parityGen.Load(), row: -1, abs: -1}
 	if n > 0 {
 		req.hasWhen = true
 		req.when = n
@@ -42,7 +42,7 @@ func (g *Game) queueSoundAtParams(row, abs int, id string, vol, pitch, dur, when
 	if vol < 0 {
 		vol = 0
 	}
-	req := soundReq{id: id, vol: vol, pitch: pitch, dur: dur, when: whenSec, hasWhen: true, enqAt: time.Now(), gen: g.audioGen.Load(), row: row, abs: abs}
+	req := soundReq{id: id, vol: vol, pitch: pitch, dur: dur, when: whenSec, hasWhen: true, enqAt: time.Now(), gen: g.audioGen.Load(), parityGen: g.parityGen.Load(), row: row, abs: abs}
 	// Mark the seq decision as having reached the audio pipeline so parity's
 	// audio_missing check does not flag in-flight/dropped audio as a scheduler
 	// bug (see paritySeqDecision.Enqueued). Sequencer reqs only (row >= 0).

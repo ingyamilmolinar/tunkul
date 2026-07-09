@@ -1756,7 +1756,10 @@ func TestInstrumentCategoryClickKeepsMenuOpenAndIsolated(t *testing.T) {
 		{ID: "snare-cat-1", Name: "Snare Cat 1", Category: "Snare"},
 	})
 	graph := model.NewGraph(logger)
-	dv := NewDrumView(image.Rect(0, 0, 260, 220), graph, logger)
+	// Tall enough for the categories view's title band + GLOBAL SEARCH row +
+	// at least two category rows (the global search bar consumes one row of
+	// vertical space that this fixture's original 220px height did not have).
+	dv := NewDrumView(image.Rect(0, 0, 260, 360), graph, logger)
 	dv.instMenuForceCategories = true
 	dv.instMenuShowFavoritesCategory = false
 	dv.calcLayout()
@@ -2634,9 +2637,9 @@ func TestNameBoxShowsBlinkingCursor(t *testing.T) {
 	defer func() { drawCursor = oldCursor }()
 
 	dst := ebiten.NewImage(320, 220)
-	// Naming overlay now draws through the portal tree.
-	if dv.tree != nil {
-		dv.tree.Draw(dst)
+	// Naming overlay now draws through the global overlay subtree.
+	if dv.overlayTree != nil {
+		dv.overlayTree.Draw(dst)
 	}
 	if calls == 0 {
 		t.Fatalf("expected blinking cursor for manual name input")
@@ -2904,9 +2907,9 @@ func TestVolumeSliderOpensPopup(t *testing.T) {
 	defer restore()
 	dv.Update()
 	// Desktop now opens volume popup instead of inline slider change.
-	// Volume should remain unchanged at the default.
-	if dv.Rows[0].Volume != 1.0 {
-		t.Fatalf("expected volume unchanged at 1.0 after click (popup opens), got %f", dv.Rows[0].Volume)
+	// Volume should remain unchanged at the fresh default (0.5).
+	if dv.Rows[0].Volume != 0.5 {
+		t.Fatalf("expected volume unchanged at 0.5 after click (popup opens), got %f", dv.Rows[0].Volume)
 	}
 }
 

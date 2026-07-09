@@ -47,58 +47,9 @@ func newRecipeAwareVoice(id string, bpm, sampleRate int) Voice {
 	return legacyNewVoice(id, bpm, sampleRate)
 }
 
-// melodicRecipeIDs is the set of synth-modular recipe IDs that represent
-// melodic instruments (bowed/plucked strings, keys, woodwinds, brass).
-// These are pitch-aware: at trigger time the C renderer re-renders the
-// voice at the node's semitone pitch so the filter formant stays at an
-// absolute Hz (not resampled). Instruments NOT in this set (drums, FM,
-// synth-modular base, synth-modular-pad) keep the legacy resample path.
-var melodicRecipeIDs = map[string]bool{
-	// Bowed strings
-	"synth-modular-violin":          true,
-	"synth-modular-violin-ensemble": true,
-	"synth-modular-cello":           true,
-	"synth-modular-cello-warm":      true,
-	"synth-modular-organ-church":    true,
-	"synth-modular-scifi-lead":      true,
-	// Plucked strings
-	"synth-modular-guitar-nylon":         true,
-	"synth-modular-guitar-nylon-bright":  true,
-	"synth-modular-guitar-steel":         true,
-	"synth-modular-guitar-steel-warm":    true,
-	"synth-modular-guitar-electric":      true,
-	"synth-modular-harp":                 true,
-	"synth-modular-guitar-electric-neck": true,
-	// Keys
-	"synth-modular-piano-grand": true,
-	"synth-modular-piano-felt":  true,
-	// Woodwinds
-	"synth-modular-flute":         true,
-	"synth-modular-flute-breathy": true,
-	"synth-modular-oboe":          true,
-	"synth-modular-oboe-full":     true,
-	// Brass
-	"synth-modular-trumpet":          true,
-	"synth-modular-trumpet-mellow":   true,
-	"synth-modular-french-horn":      true,
-	"synth-modular-french-horn-loud": true,
-	// Bass guitar (renamed from synth-bass) + synth bass family — pitched melodic.
-	"synth-modular-bass-guitar": true,
-	"synth-modular-bass-acid":   true,
-	"synth-modular-bass-reese":  true,
-	"synth-modular-bass-fm":     true,
-	"synth-modular-bass-808":    true,
-	// Masterpiece template set — pitched melodic instruments.
-	"synth-modular-organ": true,
-	"synth-modular-sax":   true,
-}
-
-// pitchAwareRecipe returns true when recipeID is a melodic synth-modular
-// recipe that benefits from per-pitch re-rendering instead of resampling.
-// Returns false for drums, FM, synth-modular (base), and synth-modular-pad.
-func pitchAwareRecipe(recipeID string) bool {
-	return melodicRecipeIDs[recipeID]
-}
+// melodicRecipeIDs and pitchAwareRecipe moved to melodic_recipes.go (untagged)
+// so the UI note-display path (all build tags) and this native render path
+// share one source of truth for which recipes are melodic.
 
 // roundPitchForCache rounds a semitone value to the nearest 0.5 st for the
 // cache key. This keeps the key space bounded while resolving the audible
@@ -162,6 +113,7 @@ func tryRecipeVoicePitched(id string, bpm, sampleRate int, pitch float64) (Voice
 		pitch:        roundedPitch,
 	}
 	if buf, ok := globalVoiceCache.Get(key); ok {
+		recordVoiceCacheHit()
 		return &cVoice{buf: buf}, true
 	}
 
@@ -180,20 +132,25 @@ func tryRecipeVoicePitched(id string, bpm, sampleRate int, pitch float64) (Voice
 			pitch:        roundedPitch,
 		}
 		if buf, ok := globalVoiceCache.Get(foldedKey); ok {
+			recordVoiceCacheHit()
 			return &cVoice{buf: buf}, true
 		}
-		// Render and store under the folded key.
+		// Render and store under the folded key (cache miss — timed).
 		buf := make([]float32, samples)
+		renderStart := time.Now()
 		recipe.Render(buf, sampleRate, samples, 0, merged)
 		normalizeAndScale(buf, baseInstrumentID(id))
+		recordVoiceRender(time.Since(renderStart))
 		buf = ApplySampleEditToBuffer(buf, sampleRate, edit)
 		globalVoiceCache.Put(foldedKey, buf)
 		return &cVoice{buf: buf}, true
 	}
 
 	buf := make([]float32, samples)
+	renderStart := time.Now()
 	recipe.Render(buf, sampleRate, samples, 0, merged)
 	normalizeAndScale(buf, baseInstrumentID(id))
+	recordVoiceRender(time.Since(renderStart))
 	globalVoiceCache.Put(key, buf)
 	return &cVoice{buf: buf}, true
 }
@@ -256,11 +213,14 @@ func tryRecipeVoiceOpts(id string, bpm, sampleRate int, ignoreEdit bool) (Voice,
 		// cVoice only READS from buf (drums_c.go:251-275 — Sample/SampleBlock
 		// never write). Safe to share the cached buffer across concurrent
 		// voices instead of cloning it; saves ~80 KB per cache-hit trigger.
+		recordVoiceCacheHit()
 		return &cVoice{buf: buf}, true
 	}
 	buf := make([]float32, samples)
+	renderStart := time.Now()
 	recipe.Render(buf, sampleRate, samples, 0, merged)
 	normalizeAndScale(buf, baseInstrumentID(id))
+	recordVoiceRender(time.Since(renderStart))
 	if hasEdit {
 		// Non-destructive Sampler edit: same transform as the Sampler tab's
 		// bake (BakeSample), applied to the fresh recipe render. BakeSample

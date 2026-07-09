@@ -22,6 +22,18 @@ import {
 // live nodes match it; the Go drift test keeps the gen file current.
 import { CHAIN_SPEC } from './chain_spec.gen.js';
 
+// MODULAR_RENDER / MODULAR_RENDER_INFO are generated from the config-first Go
+// table modularInstrumentDefs (src/go/internal/audio/modular_instruments.go).
+// They are Object.assign()d into RENDER / RENDER_INFO below so adding or cloning
+// a modular instrument is a one-row table edit — no manual audio.js change.
+import { MODULAR_RENDER, MODULAR_RENDER_INFO } from './modular_instruments.gen.js';
+
+// INSTRUMENT_LOUDNESS_AMP is generated from the config-first Go loudness
+// measurement (src/go/internal/audio/instrument_loudness_gen.go) and applied
+// as an amp override below so browser output matches native Go loudness
+// normalization exactly (see loudness_amp_parity_test.go).
+import { INSTRUMENT_LOUDNESS_AMP } from './instrument_loudness.gen.js';
+
 // Family param blocks (native-deprecation migration). An instrument whose
 // RENDER_INFO carries paramBlock:'<family>' fills this block instead of the
 // legacy 7-field synth_params. Each embeds the synth_params base at indices
@@ -354,6 +366,94 @@ const scheduleMetrics = {
 };
 scheduleMetrics.reset();
 
+// ───────── Render-latency metrics (WASM real-time observability) ─────────
+// Companion to scheduleMetrics, covering the cost scheduleMetrics CANNOT see:
+// a render-cache miss makes processAudioEvent DEFER the event and replay it
+// after the async voice render at a fresh currentTime — so the note starts
+// late relative to its musically-intended `when`, but observeScheduleTiming
+// only ever sees the rewritten (healthy-lead) timestamp. These counters make
+// that hidden lateness measurable:
+//   - renderMs*: duration of one voice render as experienced by the trigger
+//     path (worker round-trip INCLUDING queue wait, or the sync main-thread
+//     ccall fallback), plus the main-thread post-process (normalize/amp/edit).
+//   - deferMs*: SIGNED deviation (actual source start minus the originally-
+//     intended `when`) for deferred plays. Positive = late (render+queue ate
+//     more than the scheduling lead); negative = early (the replay drops the
+//     intended lead and fires at now+minLead). Both directions are off-grid
+//     jitter the listener hears when a live param edit evicts the cache
+//     mid-playback; deferAbsMsP90 is the gate-worthy magnitude.
+//   - workerQueuePeak: max in-flight render requests (single worker ⇒ queue
+//     wait ≈ peak×renderMs).
+const renderLatencyMetrics = {
+  reset() {
+    this.renders = 0;
+    this.workerRenders = 0;
+    this.mainThreadRenders = 0;
+    this.deferredPlays = 0;
+    this.renderMsSamples = [];
+    this.renderMsSum = 0;
+    this.renderMsMax = 0;
+    this.deferAbsMsSamples = [];
+    this.deferMsSum = 0;
+    this.deferMsMin = 0;
+    this.deferMsMax = 0;
+    this.workerQueuePeak = 0;
+    this.stalePlays = 0;
+    this.neighborPlays = 0;
+  },
+  observeRender(ms, viaWorker, queueDepth) {
+    if (!Number.isFinite(ms) || ms < 0) return;
+    this.renders += 1;
+    if (viaWorker) this.workerRenders += 1;
+    else this.mainThreadRenders += 1;
+    this.renderMsSum += ms;
+    if (ms > this.renderMsMax) this.renderMsMax = ms;
+    pushSample(this.renderMsSamples, ms);
+    if (Number.isFinite(queueDepth) && queueDepth > this.workerQueuePeak) {
+      this.workerQueuePeak = queueDepth;
+    }
+  },
+  observeDefer(ms) {
+    if (!Number.isFinite(ms)) return;
+    if (this.deferredPlays === 0) {
+      this.deferMsMin = this.deferMsMax = ms;
+    } else {
+      if (ms < this.deferMsMin) this.deferMsMin = ms;
+      if (ms > this.deferMsMax) this.deferMsMax = ms;
+    }
+    this.deferredPlays += 1;
+    this.deferMsSum += ms;
+    pushSample(this.deferAbsMsSamples, Math.abs(ms));
+  },
+  snapshot() {
+    return {
+      renders: this.renders,
+      workerRenders: this.workerRenders,
+      mainThreadRenders: this.mainThreadRenders,
+      renderMsAvg: this.renders ? this.renderMsSum / this.renders : 0,
+      renderMsMax: this.renderMsMax,
+      renderMsP90: percentile(this.renderMsSamples, 0.9),
+      deferredPlays: this.deferredPlays,
+      deferMsAvg: this.deferredPlays ? this.deferMsSum / this.deferredPlays : 0,
+      deferMsMin: this.deferredPlays ? this.deferMsMin : 0,
+      deferMsMax: this.deferredPlays ? this.deferMsMax : 0,
+      deferAbsMsP90: percentile(this.deferAbsMsSamples, 0.9),
+      workerQueuePeak: this.workerQueuePeak,
+      // stalePlays: notes that played a previous-generation buffer ON TIME
+      // because the fresh render missed the deadline (stale-while-revalidate).
+      stalePlays: this.stalePlays,
+      // neighborPlays: cold-miss notes that played the nearest cached pitch
+      // resampled at the intended time while the exact pitch rendered.
+      neighborPlays: this.neighborPlays,
+    };
+  },
+};
+renderLatencyMetrics.reset();
+if (typeof window !== 'undefined') {
+  window.getRenderLatencyMetrics = () => renderLatencyMetrics.snapshot();
+  window.resetRenderLatencyMetrics = () => renderLatencyMetrics.reset();
+}
+
 const AUDIO_QUEUE_MAX = 8192;
 const AUDIO_FLUSH_CHUNK = 64;
 const AUDIO_FLUSH_BUDGET_MS = 1.2;
@@ -363,6 +463,22 @@ const audioQueue = [];
 let audioQueueHead = 0;
 let audioFlushScheduled = false;
 let audioFlushInFlight = false;
+
+// Most-recent absolute ctx time a note was scheduled to start. Used by
+// isPlaybackActive() to decide whether a voice render may block the main thread
+// (it may NOT while the user is hearing playback — see ensureRenderedSample).
+let lastScheduledPlayWhen = -1;
+
+// isPlaybackActive: a note is scheduled within the near future or the last
+// ~0.5s, i.e. the user is currently hearing audio. During playback a slow /
+// timed-out worker render must NEVER fall back to a synchronous main-thread
+// render (that froze UI + audio for seconds on an instrument switch); the note
+// stays on the on-grid neighbor fallback or drops, and the exact render lands
+// off-thread later. The sync fallback remains for idle warm-up / offline paths.
+function isPlaybackActive() {
+  return hasCtx() && ctx.state === 'running' &&
+    lastScheduledPlayWhen >= 0 && (lastScheduledPlayWhen - ctx.currentTime) > -0.5;
+}
 
 function queueSize() {
   return audioQueue.length - audioQueueHead;
@@ -376,7 +492,13 @@ function sanitizeAudioEvent(ev) {
   const pitch = Number.isFinite(ev.pitch) ? ev.pitch : 0.0;
   const dur = Number.isFinite(ev.dur) && ev.dur > 0 ? ev.dur : 1.0;
   const when = Number.isFinite(ev.when) ? ev.when : NaN;
-  return { id, vol, pitch, dur, when };
+  // origWhen: the musically-intended start time carried across defer/stale
+  // replays (renderLatencyMetrics + grid-preserving reschedule). allowStale:
+  // set by the stale race's fallback replay so processAudioEvent plays the
+  // stale record instead of re-entering the race.
+  const origWhen = Number.isFinite(ev.origWhen) ? ev.origWhen : NaN;
+  const allowStale = ev.allowStale === true;
+  return { id, vol, pitch, dur, when, origWhen, allowStale };
 }
 
 function enqueueAudioEvents(events) {
@@ -399,6 +521,9 @@ function enqueueAudioEvents(events) {
     }
     audioQueue.push(ev);
     added++;
+    if (Number.isFinite(ev.when) && ev.when > lastScheduledPlayWhen) {
+      lastScheduledPlayWhen = ev.when;
+    }
   }
   if (!added) {
     return;
@@ -533,14 +658,51 @@ function processAudioEvent(ev, ctx) {
   }
   const render = renderCache.get(cacheKey);
   if (typeof window !== 'undefined' && window.__beatmoDebugSynthDispatch && window.__synthEvtTrace) {
-    console.log('[SYNTH-EVT]', { id, cacheKey, cached: !!render, hasRENDER: !!RENDER[id], vol, pitch, roundedPitch, dur, rate, when, now, params: instrumentParamsFor(id) });
+    console.log('[SYNTH-EVT]', { id, cacheKey, cached: !!render, stale: renderRecordStale(id, render), hasRENDER: !!RENDER[id], vol, pitch, roundedPitch, dur, rate, when, now, params: instrumentParamsFor(id) });
+  }
+  // The FIRST musically-intended `when`, carried across defers/replays so a
+  // note never loses its grid position (and renderLatencyMetrics can report
+  // the deviation when it does slip).
+  const intendedWhen = Number.isFinite(ev.origWhen) ? ev.origWhen : when;
+  if (render && renderRecordStale(id, render) && ev.allowStale !== true) {
+    // P0 — stale-while-revalidate: a live edit bumped the param generation.
+    // Race the fresh render against this note's deadline: play the fresh
+    // buffer at the intended `when` if it lands in time, else play the stale
+    // buffer ON TIME. Timing is never sacrificed; timbre lags at most one note.
+    // Events without a caller `when` (preview taps) aren't grid-locked and
+    // instead wait a short freshness budget for the just-edited timbre.
+    const gridLocked = Number.isFinite(ev.when);
+    raceFreshRenderAgainstDeadline(ctx, { id, vol, pitch, dur }, melodic ? pitch : undefined, intendedWhen, gridLocked);
+    return;
   }
   if (!render && RENDER[id]) {
+    if (melodic) {
+      // P3 — cold-miss neighbor fallback: this exact pitch was never rendered,
+      // but another pitch of the instrument is cached. Play the nearest one
+      // resampled AT THE INTENDED TIME (wrong formant for one note beats a
+      // note off the grid) and background-render the exact pitch for next hit.
+      const near = nearestCachedPitch(id, roundedPitch);
+      if (near) {
+        const nearRec = renderCache.get(near.key);
+        const nearBuf = nearRec && (nearRec.buffer || ensureAudioBuffer(id, near.key));
+        if (nearBuf) {
+          const nearRate = Math.pow(2, (pitch - near.pitch) / 12) / dur;
+          startRenderVoice(ctx, id, vol, nearRate, when, now, nearBuf, nearRec.data);
+          renderLatencyMetrics.neighborPlays += 1;
+          if (Number.isFinite(ev.origWhen)) {
+            renderLatencyMetrics.observeDefer((when - ev.origWhen) * 1000);
+          }
+          ensureRenderReady(id, roundedPitch).catch(() => {});
+          return;
+        }
+      }
+    }
+    // P1 — true first-render defer: replay at the ORIGINAL intended `when`
+    // (floored to now+minLead on arrival), not at a fresh "now". If the render
+    // beats the deadline the note lands exactly on grid; if not it plays as
+    // soon as possible — late by the render overshoot only, never early.
     ensureRenderReady(id, melodic ? roundedPitch : undefined).then(() => {
-      // Omit `when` so the event plays at current time instead of the
-      // original (now stale) timestamp that was computed before the
-      // sample finished rendering.
-      enqueueAudioEvents([{ id, vol, pitch, dur }]);
+      enqueueAudioEvents([{ id, vol, pitch, dur, when: intendedWhen, origWhen: intendedWhen }]);
     }).catch((err) => dbg('audio.render.defer.error', { id, err: String(err) }));
     return;
   }
@@ -551,24 +713,16 @@ function processAudioEvent(ev, ctx) {
       dbg('audio.render.nobuf', { id });
       return;
     }
-    const src = ctx.createBufferSource();
-    trackSource(id, src);
-    try { src.playbackRate.setValueAtTime(rate, when); } catch (_) { src.playbackRate.value = rate; }
-    src.buffer = buf;
-    // Anti-pop: per-source fade GainNode with 5ms fade-in ramp. The ramp target
-    // is CHAIN_SPEC.voiceHeadroom (NOT 1.0): native applies this per-voice
-    // attenuation before summing voices (engine_stop.go renderVoiceIntoInstBuf),
-    // so WebAudio must too — otherwise N voices sum hot and slam the master
-    // compressor/limiter into audible clipping (browser-only mix distortion).
-    const fadeGain = ctx.createGain();
-    fadeGain.gain.setValueAtTime(0, when);
-    fadeGain.gain.linearRampToValueAtTime(CHAIN_SPEC.voiceHeadroom, when + 0.005);
-    src.connect(fadeGain);
-    fadeGain.connect(getBus(id, vol));
-    src._antiPopGain = fadeGain; // stash for stopSound fade-out
-    observeScheduleTiming(ctx, when, now);
-    try { recordSamples(render.data, vol); } catch (_) {}
-    src.start(when);
+    if (ev.allowStale === true && renderRecordStale(id, render)) {
+      renderLatencyMetrics.stalePlays += 1;
+    }
+    if (Number.isFinite(ev.origWhen)) {
+      // This event was deferred by a render-cache miss or stale race: record
+      // the signed deviation from its musically-intended start (hidden from
+      // the schedule metrics, which only see the rewritten `when`).
+      renderLatencyMetrics.observeDefer((when - ev.origWhen) * 1000);
+    }
+    startRenderVoice(ctx, id, vol, rate, when, now, buf, render.data);
     return;
   }
   const buf = samples[id];
@@ -606,6 +760,68 @@ function processAudioEvent(ev, ctx) {
     return;
   }
   playSoundParams(id, vol, pitch, dur, when).catch((err) => dbg('play.batch.fallback.error', { id, err: String(err) }));
+}
+
+// startRenderVoice: create + connect + start one BufferSource for a cached
+// render (the former inline body of processAudioEvent's render-hit branch,
+// shared with the P3 neighbor-pitch fallback).
+function startRenderVoice(ctx, id, vol, rate, when, now, buf, recData) {
+  const src = ctx.createBufferSource();
+  trackSource(id, src);
+  try { src.playbackRate.setValueAtTime(rate, when); } catch (_) { src.playbackRate.value = rate; }
+  src.buffer = buf;
+  // Anti-pop: per-source fade GainNode with 5ms fade-in ramp. The ramp target
+  // is CHAIN_SPEC.voiceHeadroom (NOT 1.0): native applies this per-voice
+  // attenuation before summing voices (engine_stop.go renderVoiceIntoInstBuf),
+  // so WebAudio must too — otherwise N voices sum hot and slam the master
+  // compressor/limiter into audible clipping (browser-only mix distortion).
+  const fadeGain = ctx.createGain();
+  fadeGain.gain.setValueAtTime(0, when);
+  fadeGain.gain.linearRampToValueAtTime(CHAIN_SPEC.voiceHeadroom, when + 0.005);
+  src.connect(fadeGain);
+  fadeGain.connect(getBus(id, vol));
+  src._antiPopGain = fadeGain; // stash for stopSound fade-out
+  observeScheduleTiming(ctx, when, now);
+  try { if (recData) recordSamples(recData, vol); } catch (_) {}
+  src.start(when);
+}
+
+// How long before the intended `when` the stale race stops waiting for the
+// fresh render and falls back to the stale buffer. Covers the re-enqueue +
+// microtask flush + lazy AudioBuffer wrap (~1–3ms) with headroom.
+const FRESH_DEADLINE_MARGIN_SEC = 0.012;
+// Deadline for events with NO caller-supplied `when` (preview taps, immediate
+// plays): they aren't grid-locked, so freshness beats the nominal now+minLead
+// start — wait up to this long for the just-edited timbre before falling back
+// to the stale buffer. Sized to comfortably cover one voice render (~25–40ms).
+const FRESH_NOWAIT_BUDGET_SEC = 0.08;
+
+// raceFreshRenderAgainstDeadline (P0): a stale-cache note either plays the
+// FRESH render at its intended `when` (render resolved in time) or the STALE
+// buffer at the same intended `when` (deadline hit first). Exactly one replay
+// fires; the loser of the race no-ops. A failed render also falls back to the
+// stale buffer, so an edit can never silence a note.
+//
+// The replay always carries allowStale:true — it means "play the best buffer
+// available NOW, do not race again". Without it a fresh replay that finds the
+// record stale AGAIN (edits still streaming in) would re-enter the race and
+// drift later on every cycle; one race per note bounds the slip to one
+// deadline. gridLocked distinguishes sequencer-scheduled events (deadline =
+// the intended `when`; the grid rules) from immediate plays (deadline = a
+// freshness budget; the newest timbre rules).
+function raceFreshRenderAgainstDeadline(ctx, ev, pitchForRender, intendedWhen, gridLocked) {
+  let decided = false;
+  const replay = () => {
+    if (decided) return;
+    decided = true;
+    enqueueAudioEvents([{ id: ev.id, vol: ev.vol, pitch: ev.pitch, dur: ev.dur, when: intendedWhen, origWhen: intendedWhen, allowStale: true }]);
+  };
+  ensureRenderReady(ev.id, pitchForRender).then(replay).catch(replay);
+  const now = ctx.currentTime || 0;
+  const deadlineSec = gridLocked
+    ? (intendedWhen - now - FRESH_DEADLINE_MARGIN_SEC)
+    : FRESH_NOWAIT_BUDGET_SEC;
+  setTimeout(replay, Math.max(0, deadlineSec * 1000));
 }
 
 function pushSample(arr, value) {
@@ -907,41 +1123,61 @@ async function ensureModule() {
 // the worker is unavailable (no Worker support, init failure, hung render) the
 // code falls back to the original synchronous main-thread ccall, so behaviour
 // degrades to "pre-fix" rather than breaking.
-let synthRenderWorker = null;
+// Render-worker POOL. A single worker serialized every cold render, so a burst
+// of distinct cold pitches (a row just switched to a melodic instrument, or a
+// pre-warm of its pitch set) stacked round-trips (organ ~420ms each in WASM →
+// multi-second warm). A small pool renders the burst in parallel; each render
+// is dispatched to the least-loaded worker. Pool size is capped low to bound
+// memory (each worker hosts its own SINGLE_FILE wasm module). Output is
+// worker-independent, so parity (xplat_audio_compare) is unaffected.
+const SYNTH_WORKER_POOL_SIZE = (() => {
+  try {
+    const c = (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) || 4;
+    return Math.max(1, Math.min(3, c - 1));
+  } catch (_) { return 2; }
+})();
+let synthWorkerPool = null;       // array of { worker, inflight }
 let synthWorkerDisabled = false;
 let synthWorkerReqSeq = 0;
-const synthWorkerPending = new Map();
+const synthWorkerPending = new Map(); // reqId -> { resolve, reject, t, entry }
 const SYNTH_WORKER_RENDER_TIMEOUT_MS = 4000;
 
-function ensureSynthRenderWorker() {
-  if (synthRenderWorker) return synthRenderWorker;
+function makeSynthWorker() {
+  const w = new Worker(new URL('./synth_render_worker.js', import.meta.url), { type: 'module' });
+  const entry = { worker: w, inflight: 0 };
+  w.onmessage = (ev) => {
+    const msg = ev.data || {};
+    if (msg.type === 'rendered') {
+      const p = synthWorkerPending.get(msg.reqId);
+      if (p) { synthWorkerPending.delete(msg.reqId); if (p.t) clearTimeout(p.t); if (p.entry) p.entry.inflight--; p.resolve(msg.data); }
+    } else if (msg.type === 'error') {
+      const p = synthWorkerPending.get(msg.reqId);
+      if (p) { synthWorkerPending.delete(msg.reqId); if (p.t) clearTimeout(p.t); if (p.entry) p.entry.inflight--; p.reject(new Error(msg.err || 'worker render error')); }
+    } else if (msg.type === 'ready') {
+      dbg('synth.worker.ready');
+    } else if (msg.type === 'initerror') {
+      synthWorkerDisabled = true;
+      dbg('synth.worker.initerror', { err: msg.err });
+      rejectAllSynthWorkerPending(new Error('worker init failed: ' + msg.err));
+    }
+  };
+  w.onerror = (e) => {
+    synthWorkerDisabled = true;
+    dbg('synth.worker.error', { err: String(e && e.message ? e.message : e) });
+    rejectAllSynthWorkerPending(new Error('worker error: ' + String(e && e.message ? e.message : e)));
+  };
+  return entry;
+}
+
+function ensureSynthRenderWorkers() {
+  if (synthWorkerPool) return synthWorkerPool;
   if (synthWorkerDisabled) return null;
   if (typeof Worker === 'undefined') { synthWorkerDisabled = true; return null; }
   try {
-    const w = new Worker(new URL('./synth_render_worker.js', import.meta.url), { type: 'module' });
-    w.onmessage = (ev) => {
-      const msg = ev.data || {};
-      if (msg.type === 'rendered') {
-        const p = synthWorkerPending.get(msg.reqId);
-        if (p) { synthWorkerPending.delete(msg.reqId); if (p.t) clearTimeout(p.t); p.resolve(msg.data); }
-      } else if (msg.type === 'error') {
-        const p = synthWorkerPending.get(msg.reqId);
-        if (p) { synthWorkerPending.delete(msg.reqId); if (p.t) clearTimeout(p.t); p.reject(new Error(msg.err || 'worker render error')); }
-      } else if (msg.type === 'ready') {
-        dbg('synth.worker.ready');
-      } else if (msg.type === 'initerror') {
-        synthWorkerDisabled = true;
-        dbg('synth.worker.initerror', { err: msg.err });
-        rejectAllSynthWorkerPending(new Error('worker init failed: ' + msg.err));
-      }
-    };
-    w.onerror = (e) => {
-      synthWorkerDisabled = true;
-      dbg('synth.worker.error', { err: String(e && e.message ? e.message : e) });
-      rejectAllSynthWorkerPending(new Error('worker error: ' + String(e && e.message ? e.message : e)));
-    };
-    synthRenderWorker = w;
-    return w;
+    const pool = [];
+    for (let i = 0; i < SYNTH_WORKER_POOL_SIZE; i++) pool.push(makeSynthWorker());
+    synthWorkerPool = pool;
+    return pool;
   } catch (e) {
     synthWorkerDisabled = true;
     dbg('synth.worker.create.error', { err: String(e) });
@@ -949,32 +1185,50 @@ function ensureSynthRenderWorker() {
   }
 }
 
+// pickSynthWorker returns the least-loaded pool entry so a burst of renders
+// spreads across workers instead of piling on one.
+function pickSynthWorker(pool) {
+  let best = pool[0];
+  for (let i = 1; i < pool.length; i++) {
+    if (pool[i].inflight < best.inflight) best = pool[i];
+  }
+  return best;
+}
+
 function rejectAllSynthWorkerPending(err) {
-  for (const [, p] of synthWorkerPending) { if (p.t) clearTimeout(p.t); try { p.reject(err); } catch (_) {} }
+  for (const [, p] of synthWorkerPending) { if (p.t) clearTimeout(p.t); if (p.entry) p.entry.inflight--; try { p.reject(err); } catch (_) {} }
   synthWorkerPending.clear();
 }
 
-// renderVoiceInWorker posts a render request and resolves with the rendered
-// Float32Array (length === frames). Rejects if the worker is unavailable, errors,
-// or does not answer within the timeout — callers fall back to a sync render.
-// The param block is structured-cloned (NOT transferred) so the caller keeps it
-// for the synchronous fallback path.
-function renderVoiceInWorker(renderFn, sr, frames, paramArr, allocCount) {
-  const w = ensureSynthRenderWorker();
-  if (!w) return Promise.reject(new Error('synth render worker unavailable'));
+// renderVoiceInWorker posts a render request to the least-loaded pool worker and
+// resolves with the rendered Float32Array (length === frames). Rejects if no
+// worker is available, on error, or on timeout — callers handle the reject
+// (during playback they do NOT sync-render; see ensureRenderedSample). The param
+// block is structured-cloned (NOT transferred) so the caller keeps it for the
+// synchronous fallback path.
+function renderVoiceInWorker(renderFn, sr, frames, paramArr, allocCount, postAmp) {
+  const pool = ensureSynthRenderWorkers();
+  if (!pool) return Promise.reject(new Error('synth render worker unavailable'));
+  const entry = pickSynthWorker(pool);
   return new Promise((resolve, reject) => {
     const reqId = ++synthWorkerReqSeq;
     const t = setTimeout(() => {
-      if (synthWorkerPending.has(reqId)) {
+      const p = synthWorkerPending.get(reqId);
+      if (p) {
         synthWorkerPending.delete(reqId);
+        if (p.entry) p.entry.inflight--;
         reject(new Error('synth render worker timeout'));
       }
     }, SYNTH_WORKER_RENDER_TIMEOUT_MS);
-    synthWorkerPending.set(reqId, { resolve, reject, t });
+    synthWorkerPending.set(reqId, { resolve, reject, t, entry });
+    entry.inflight++;
     try {
-      w.postMessage({ type: 'render', reqId, renderFn, sr, frames, allocCount: allocCount || 0, params: paramArr || null });
+      // postAmp: when finite, the worker also peak-normalizes and amp-scales
+      // the buffer (identical float32 loop order to the main-thread fallback,
+      // so results stay bit-identical), keeping that O(frames) work off main.
+      entry.worker.postMessage({ type: 'render', reqId, renderFn, sr, frames, allocCount: allocCount || 0, params: paramArr || null, postAmp: Number.isFinite(postAmp) ? postAmp : null });
     } catch (e) {
-      synthWorkerPending.delete(reqId); clearTimeout(t); reject(e);
+      synthWorkerPending.delete(reqId); clearTimeout(t); entry.inflight--; reject(e);
     }
   });
 }
@@ -1008,9 +1262,9 @@ function renderVoiceSync(m, renderFn, sr, frames, paramArr, allocCount) {
   }
 }
 
-// Pre-warm the off-thread synth renderer so the first live render is ready to
-// go off-main-thread (no first-note main-thread stall). Best-effort.
-try { ensureSynthRenderWorker(); } catch (_) {}
+// Pre-warm the off-thread synth render pool so the first live render is ready
+// to go off-main-thread (no first-note main-thread stall). Best-effort.
+try { ensureSynthRenderWorkers(); } catch (_) {}
 
 const RENDER = {
   // Snare family migrated to the unified modular engine (Phase-5). Render through
@@ -1130,12 +1384,8 @@ const RENDER = {
   // throws "Unknown sound" and is silent on WASM while playing fine on desktop.
   'organ': 'render_modular',
   'sax': 'render_modular',
-  // Configurable KICK stage family (modular gen-bank kick voice, source==5).
-  'dnb-kick': 'render_modular',
-  'kick-electro': 'render_modular',
-  'kick-808': 'render_modular',
-  'kick-acoustic': 'render_modular',
-  'kick-punchy': 'render_modular',
+  // Configurable KICK stage family (modular gen-bank kick voice, source==5) is
+  // generated from the Go table and merged via Object.assign(RENDER, …) below.
 };
 
 const RENDER_INFO = {
@@ -1227,14 +1477,26 @@ const RENDER_INFO = {
   // Masterpiece template set — organ + sax (sustained 2.0s, modular block).
   'organ': { seconds: 2.0, amp: 0.8, paramBlock: 'modular' },
   'sax':   { seconds: 2.0, amp: 0.8, paramBlock: 'modular' },
-  // Configurable KICK stage family. NOT in MELODIC_INSTRUMENTS (percussion:
-  // resampled like the other drums, not per-pitch re-rendered).
-  'dnb-kick': { seconds: 0.5, amp: 0.8, paramBlock: 'modular' },
-  'kick-electro': { seconds: 0.5, amp: 0.8, paramBlock: 'modular' },
-  'kick-808': { seconds: 0.75, amp: 0.8, paramBlock: 'modular' },
-  'kick-acoustic': { seconds: 0.5, amp: 0.8, paramBlock: 'modular' },
-  'kick-punchy': { seconds: 0.5, amp: 0.8, paramBlock: 'modular' },
+  // Configurable KICK stage family (NOT in MELODIC_INSTRUMENTS — percussion,
+  // resampled like the other drums) is generated from the Go table and merged
+  // via Object.assign(RENDER_INFO, …) below.
 };
+
+// Merge the config-first modular instrument tables generated from the Go source
+// of truth. Kept as an Object.assign (not spread inline) so the generated file
+// is the sole owner of these ids and future rows need no audio.js edit.
+Object.assign(RENDER, MODULAR_RENDER);
+Object.assign(RENDER_INFO, MODULAR_RENDER_INFO);
+
+// Loudness normalization: override each instrument's amp with the measured,
+// loudness-normalized value so browser output matches native Go (which applies
+// the same value via ConfigForInstrument). Modular entries come from a frozen
+// generated object, so REPLACE the entry (spread) rather than mutate .amp.
+for (const [id, amp] of Object.entries(INSTRUMENT_LOUDNESS_AMP)) {
+  if (RENDER_INFO[id]) {
+    RENDER_INFO[id] = { ...RENDER_INFO[id], amp };
+  }
+}
 
 // ───────── Per-pitch melodic re-render (desktop↔WASM parity) ─────────
 // Desktop melodic instruments RE-RENDER the C voice at the played semitone
@@ -1313,6 +1575,77 @@ function evictRenderCache(id) {
       if (key.startsWith(prefix)) renderCache.delete(key);
     }
   }
+}
+
+// Test-only: force an instrument fully cold (drop every rendered pitch variant
+// AND the lazily-wrapped AudioBuffers) so a bench can measure the cold-start
+// cost of switching a row to a never-rendered instrument. Mirrors the
+// window.__test* affordances above; production code never reads it.
+if (typeof window !== 'undefined') {
+  window.__evictRenderCacheForTest = (id) => {
+    evictRenderCache(id);
+    delete samples[id];
+    rawRenderCache.delete(id);
+  };
+}
+
+// ───────── Stale-while-revalidate param generations (WASM real-time fix) ─────────
+// A live param / sample-edit push used to evictRenderCache(id) — leaving NOTHING
+// playable, so every subsequent trigger deferred behind a ~30–40ms async render
+// and played off the musical grid (measured 13–56ms early on fast machines, up
+// to +104ms late throttled — see webaudio_render_latency_bench.browser.test.js).
+// Instead, edits now bump a per-instrument GENERATION; cached records carry the
+// generation they were rendered at. A record whose generation lags is STALE:
+// still playable ON TIME (grid beats timbre freshness by one note), while a
+// background re-render replaces it. processAudioEvent races the fresh render
+// against the note's deadline and plays whichever is ready (fresh preferred).
+// In-flight render dedup (pendingRenderEnsures) + generation equality is the
+// storm coalescing: at most one render per (id,pitch) is in flight no matter
+// how fast the knob drags.
+const instrumentParamsGen = new Map(); // id -> monotonically increasing edit counter
+function bumpInstrumentParamsGen(id) {
+  instrumentParamsGen.set(id, (instrumentParamsGen.get(id) || 0) + 1);
+}
+function paramsGenOf(id) {
+  return instrumentParamsGen.get(id) || 0;
+}
+// renderRecordStale: true when id is a re-renderable synth (RENDER[id]) and the
+// cached record was rendered under an older param generation. Sample-PCM
+// records (registerSamplePCM deletes RENDER[id]) are never stale.
+function renderRecordStale(id, record) {
+  return !!(record && RENDER[id] && (record.gen || 0) !== paramsGenOf(id));
+}
+
+// nearestCachedPitch: cold-miss fallback for melodic instruments — find the
+// cached render (bare id = pitch 0, or any id:<pitch> variant) closest to the
+// requested rounded pitch so the note can play resampled AT ITS INTENDED TIME
+// while the exact-pitch render happens in the background. Wrong formant for
+// one note beats a note off the grid.
+function nearestCachedPitch(id, roundedPitch) {
+  let bestKey = null;
+  let bestPitch = 0;
+  let bestDist = Infinity;
+  const bare = renderCache.get(id);
+  if (bare && bare.data) {
+    bestKey = id;
+    bestPitch = 0;
+    bestDist = Math.abs(roundedPitch);
+  }
+  const prefix = id + ':';
+  for (const key of renderCache.keys()) {
+    if (!key.startsWith(prefix)) continue;
+    const rec = renderCache.get(key);
+    if (!rec || !rec.data) continue;
+    const p = parseFloat(key.slice(prefix.length));
+    if (!Number.isFinite(p)) continue;
+    const d = Math.abs(p - roundedPitch);
+    if (d < bestDist) {
+      bestDist = d;
+      bestKey = key;
+      bestPitch = p;
+    }
+  }
+  return bestKey === null ? null : { key: bestKey, pitch: bestPitch };
 }
 
 // renderCache holds the pre-rendered Float32Array + metadata for every
@@ -2251,6 +2584,34 @@ window.updateInstrumentParams = (id, paramsJSON) => {
   catch (err) { dbg('synth.param.error', { id, err: String(err) }); }
 };
 
+// warmInstrument is invoked by Go-WASM (voice_warm_js.go) when a row is switched
+// to id. It pre-renders id's voices for the candidate node pitches OFF-THREAD
+// (render worker) so the first notes after the switch hit a warm cache instead
+// of a cold per-pitch render (the "click + laggy on instrument switch" bug).
+// Non-melodic instruments share one bare-id key, so they warm once regardless
+// of the pitch list. Best-effort + non-blocking: renders are deduped by
+// pendingRenderEnsures and failures are swallowed (a missed warm just falls
+// back to the normal on-demand render at play time).
+window.warmInstrument = (id, pitchesJSON) => {
+  try {
+    if (!RENDER[id]) return;
+    if (!isMelodicInstrument(id)) {
+      ensureRenderReady(id).catch(() => {});
+      return;
+    }
+    let pitches = [];
+    try { pitches = JSON.parse(pitchesJSON); } catch (_) { pitches = []; }
+    if (!Array.isArray(pitches) || pitches.length === 0) pitches = [0];
+    const seen = new Set();
+    for (const p of pitches) {
+      const rp = roundPitchForCache(p);
+      if (seen.has(rp)) continue;
+      seen.add(rp);
+      ensureRenderReady(id, rp).catch(() => {});
+    }
+  } catch (err) { dbg('warm.error', { id, err: String(err) }); }
+};
+
 // Test-only helper: forces a fresh render via ensureRenderedSample and
 // returns a tail-energy summary of the resulting Float32Array. Used by
 // instrument_params_audible.browser.test.js to verify
@@ -2312,18 +2673,19 @@ function _updateInstrumentParams(id, paramsJSON) {
   } else {
     instrumentSynthParams.delete(id);
   }
-  // Drop cached render so the next play re-runs through `render_X_p` with the
-  // new values — but ONLY for a C-synth instrument (RENDER[id] present), whose
+  // Mark cached renders STALE (generation bump) so the next play re-renders
+  // through `render_X_p` with the new values in the BACKGROUND while the stale
+  // buffer keeps playing ON TIME (stale-while-revalidate — the WASM real-time
+  // fix; a hard evict left nothing playable and every storm note played off
+  // the grid). Only for a C-synth instrument (RENDER[id] present), whose
   // renderCache entry is re-derivable. For a SAMPLE-based instrument
   // (registerSamplePCM deleted RENDER[id]), the renderCache entry holds the ONLY
-  // copy of its PCM: deleting it permanently silences the instrument because
-  // processAudioEvent can't re-render it (no RENDER[id], no URL) and falls through
-  // to "Unknown sound". A raw sample isn't synth-parameterised, so a knob /
-  // knob edit must leave its buffer intact. This is the "changing the generator
-  // on a soloed (sample) instrument kills the audio, dead until reload" bug.
+  // copy of its PCM: a knob edit must leave its buffer intact. This is the
+  // "changing the generator on a soloed (sample) instrument kills the audio,
+  // dead until reload" bug.
   // Guard: synth_sample_param_change_keeps_audio.browser.test.js.
   if (RENDER[id]) {
-    evictRenderCache(id);
+    bumpInstrumentParamsGen(id);
     delete samples[id];
     rawRenderCache.delete(id);
   } else if (RENDER_DEFAULTS[id] !== undefined) {
@@ -2407,9 +2769,11 @@ function _updateSampleEdit(id, editJSON) {
   // Same RENDER[id] guard as _updateInstrumentParams: a sample-based
   // instrument's renderCache entry holds the ONLY copy of its PCM — deleting
   // it would permanently silence the instrument. The descriptor only applies
-  // to re-derivable C-synth renders anyway.
+  // to re-derivable C-synth renders anyway. Generation bump, not evict: the
+  // stale render keeps playing on time while the edited one re-renders
+  // (stale-while-revalidate, same as the param path).
   if (RENDER[id]) {
-    evictRenderCache(id);
+    bumpInstrumentParamsGen(id);
     delete samples[id];
   }
 }
@@ -2921,7 +3285,10 @@ export function sendBusAnalyzerSnapshot(bins = 64) {
 }
 
 function getBus(id, vol) {
-  const v = Math.max(0, Math.min(1, Number.isFinite(vol) ? vol : 1.0));
+  // Per-note gain (row × node volume) is unbounded above so a boosted node can
+  // exceed unity, matching native scaledVoice (no upper clamp) for cross-platform
+  // parity; the master compressor/limiter tames extreme peaks. Only clamp <0.
+  const v = Math.max(0, Number.isFinite(vol) ? vol : 1.0);
   const q = Math.round(v * VOL_Q);
   const key = id + '|' + q;
   const now = (hasCtx() ? ctx.currentTime : 0) || 0;
@@ -3067,9 +3434,13 @@ async function ensureRenderedSample(id, opts) {
   const sr = Math.max(8000, Math.min(192000, getSampleRate()));
   // If cache exists but was built for a different sample rate, rebuild so pitch
   // and duration stay correct on devices that default to 48 kHz.
+  // Param generation this render is being built for. Captured BEFORE the
+  // async render so a mid-render edit leaves the new record already-stale and
+  // the next trigger re-renders (self-coalescing: at most one render behind).
+  const genAtStart = paramsGenOf(id);
   if (!bypassCache && renderCache.has(cacheKey)) {
     const hit = renderCache.get(cacheKey);
-    if (hit && hit.sr === sr) {
+    if (hit && hit.sr === sr && (hit.gen || 0) === genAtStart) {
       try {
         if (typeof window !== 'undefined') {
           const metrics = window.__audioMetrics || (window.__audioMetrics = { renders: {}, cacheHits: {} });
@@ -3078,8 +3449,12 @@ async function ensureRenderedSample(id, opts) {
       } catch (_) {}
       return hit;
     }
-    // Drop stale entry so we regenerate with the correct rate.
-    renderCache.delete(cacheKey);
+    if (!hit || hit.sr !== sr) {
+      // Wrong-rate entry can't be played; drop and regenerate.
+      renderCache.delete(cacheKey);
+    }
+    // Param-stale entry (gen lag) stays in the cache — it is the ON-TIME
+    // playback fallback until the fresh render below replaces it.
   }
   const info = RENDER_INFO[id] || { seconds: 0.5, amp: 0.8 };
   const frames = Math.max(1, Math.floor(sr * info.seconds));
@@ -3161,11 +3536,29 @@ async function ensureRenderedSample(id, opts) {
   let data = null;
   let viaWorker = false;
   let nativeFallback = false;
+  // P4: the worker applies peak-normalize + amp when it renders, so the main
+  // thread's per-render O(frames) passes only run on the sync fallback.
+  const ampVal = Number.isFinite(info.amp) ? info.amp : 0.6;
+  // Render-latency observation: wall time from render request to cached
+  // buffer, as experienced by the trigger path (worker queue wait + render +
+  // main-thread post-process). Queue depth is sampled at request time — with
+  // a single render worker, depth N means ~N×renderMs of added wait.
+  const renderT0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+  const renderQueueDepth = synthWorkerPending.size;
+  // While the user is hearing playback, a slow / timed-out worker render must
+  // never block the main thread. When the worker path fails during playback we
+  // throw "render deferred" instead of sync-rendering: the caller's on-grid
+  // neighbor fallback (or a single dropped note) covers it, and the exact
+  // render still lands off-thread. The synchronous fallback stays available for
+  // idle warm-up and offline paths so behaviour there degrades, not breaks.
+  const allowMainThreadRender = !isPlaybackActive();
+  const RENDER_DEFERRED = () => new Error('render deferred: worker unavailable during playback');
   if (!(paramArr && forceParamThrow)) {
     try {
-      data = await renderVoiceInWorker(renderFn, sr, frames, paramArr, allocCount);
+      data = await renderVoiceInWorker(renderFn, sr, frames, paramArr, allocCount, ampVal);
       viaWorker = true;
     } catch (werr) {
+      if (!allowMainThreadRender) throw RENDER_DEFERRED();
       try {
         data = renderVoiceSync(m, renderFn, sr, frames, paramArr, allocCount);
         viaWorker = false;
@@ -3179,34 +3572,42 @@ async function ensureRenderedSample(id, opts) {
       '; falling back to native ' + nativeFn);
     nativeFallback = true;
     try {
-      data = await renderVoiceInWorker(nativeFn, sr, frames, null, 0);
+      data = await renderVoiceInWorker(nativeFn, sr, frames, null, 0, ampVal);
       viaWorker = true;
     } catch (_) {
+      if (!allowMainThreadRender) throw RENDER_DEFERRED();
       data = renderVoiceSync(m, nativeFn, sr, frames, null, 0);
       viaWorker = false;
     }
   }
   if (data === null) {
     // No params (or everything above failed) — last-resort synchronous render.
+    if (!allowMainThreadRender) throw RENDER_DEFERRED();
     data = renderVoiceSync(m, nativeFn, sr, frames, null, 0);
     viaWorker = false;
   }
 
   // ── Post-processing: peak-normalize → amp scale → optional sample-edit ──
-  let peak = 0;
-  for (let i = 0; i < data.length; i++) {
-    const a = Math.abs(data[i]);
-    if (a > peak) peak = a;
-  }
+  // Worker renders arrive already normalized + amp-scaled (P4); the sync
+  // fallback still does it here. Loop order matches the worker exactly so
+  // both paths produce bit-identical float32 output.
   if (typeof window !== 'undefined' && window.__beatmoDebugSynthDispatch) {
-    console.log('[SYNTH-DISPATCH]', 'render result', { id, viaWorker, nativeFallback, rawPeak: peak, silent: !(peak > 1e-6) });
+    let pk = 0;
+    for (let i = 0; i < data.length; i++) { const a = Math.abs(data[i]); if (a > pk) pk = a; }
+    console.log('[SYNTH-DISPATCH]', 'render result', { id, viaWorker, nativeFallback, peak: pk, normalized: viaWorker, silent: !(pk > 1e-6) });
   }
-  if (peak > 0) {
-    const inv = 1 / peak;
-    for (let i = 0; i < data.length; i++) data[i] *= inv;
+  if (!viaWorker) {
+    let peak = 0;
+    for (let i = 0; i < data.length; i++) {
+      const a = Math.abs(data[i]);
+      if (a > peak) peak = a;
+    }
+    if (peak > 0) {
+      const inv = 1 / peak;
+      for (let i = 0; i < data.length; i++) data[i] *= inv;
+    }
+    for (let i = 0; i < data.length; i++) data[i] *= ampVal;
   }
-  const amp = Number.isFinite(info.amp) ? info.amp : 0.6;
-  for (let i = 0; i < data.length; i++) data[i] *= amp;
   // Non-destructive Sampler edit: same transform as Go's BakeSample, applied
   // to the fresh C render (mirrors tryRecipeVoice in synth_recipe_dispatch.go).
   // The synth stays the source of truth — a param change re-renders through
@@ -3215,10 +3616,14 @@ async function ensureRenderedSample(id, opts) {
   if (sampleEdit) {
     finalData = applySampleEdit(data, sr, sampleEdit);
   }
+  if (renderT0 > 0) {
+    renderLatencyMetrics.observeRender(performance.now() - renderT0, viaWorker, renderQueueDepth);
+  }
   // Store raw Float32Array + metadata. AudioBuffer is created lazily in
   // ensureAudioBuffer() when playback actually needs it, so this path
-  // never forces an AudioContext into existence.
-  const record = { buffer: null, data: finalData, sr, frames: finalData.length };
+  // never forces an AudioContext into existence. `gen` marks which param
+  // generation this render reflects (stale-while-revalidate).
+  const record = { buffer: null, data: finalData, sr, frames: finalData.length, gen: genAtStart };
   if (!bypassCache) {
     renderCache.set(cacheKey, record);
   }
@@ -3420,11 +3825,12 @@ export function ensureRenderReady(id, pitch) {
   // callers pass no pitch → bare-id key, unchanged.
   const roundedPitch = (isMelodicInstrument(id) && Number.isFinite(pitch)) ? roundPitchForCache(pitch) : 0;
   const cacheKey = cacheKeyFor(id, roundedPitch);
-  if (renderCache.has(cacheKey)) {
-    return Promise.resolve(renderCache.get(cacheKey));
+  const cached = renderCache.get(cacheKey);
+  if (cached && !renderRecordStale(id, cached)) {
+    return Promise.resolve(cached);
   }
   if (!RENDER[id]) {
-    return Promise.resolve(null);
+    return Promise.resolve(cached || null);
   }
   let pending = pendingRenderEnsures.get(cacheKey);
   if (pending) {

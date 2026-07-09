@@ -116,7 +116,12 @@ func (g *Game) endImportDialog() {
 	g.importDialog = false
 }
 
-func (g *Game) recordParityAudio(row, abs int, when float64, inst string, vol, pitch, dur float64, gen uint64) {
+// recordParityAudio logs a parity audio event. parityGen is the parity
+// generation captured when the sound was SCHEDULED (not now): audio may be
+// recorded after a structural mutation advanced g.parityGen, and stamping the
+// current generation would desync it from its (older-generation) seq decision.
+// See soundReq.parityGen for the full rationale.
+func (g *Game) recordParityAudio(row, abs int, when float64, inst string, vol, pitch, dur float64, gen uint64, parityGen uint64) {
 	if g == nil {
 		return
 	}
@@ -150,7 +155,7 @@ func (g *Game) recordParityAudio(row, abs int, when float64, inst string, vol, p
 		Pitch:      pitch,
 		Dur:        dur,
 		Gen:        gen,
-		ParityGen:  g.parityGen.Load(),
+		ParityGen:  parityGen,
 		RecordedAt: time.Now(),
 	})
 	const parityAudioMax = 1024

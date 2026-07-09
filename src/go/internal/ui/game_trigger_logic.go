@@ -141,6 +141,29 @@ func (g *Game) evalNodeParamsOnly(row, idx int, info model.BeatInfo) (float64, f
 		// Do not apply user logic or trigger-based rules here; gating and
 		// counters are handled elsewhere by predictions/sequencer.
 	}
+	if gi := g.groupIndexSnapshot(); gi != nil && gi.HasRules(info.NodeID) {
+		pd, vm, dm := model.GroupEffect(gi, info.NodeID, g.roundAtRowIdx(row, idx))
+		pitch += pd
+		vol *= vm
+		dur *= dm
+		// Final legal-range clamp — only for ruled nodes so ungrouped
+		// behavior is byte-identical to before this feature.
+		if pitch < -24 {
+			pitch = -24
+		} else if pitch > 24 {
+			pitch = 24
+		}
+		if vol < 0 {
+			vol = 0
+		} else if vol > 4 {
+			vol = 4
+		}
+		if dur < 0.1 {
+			dur = 0.1
+		} else if dur > 4 {
+			dur = 4
+		}
+	}
 	return vol, pitch, dur
 }
 

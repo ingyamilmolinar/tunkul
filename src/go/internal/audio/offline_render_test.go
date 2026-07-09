@@ -156,6 +156,21 @@ func pinSampleRate(t *testing.T, sr int) {
 	t.Cleanup(func() { sampleRate = old })
 }
 
+// pinMasterVolume fixes the main-channel (master) gain for a test so the
+// offline golden hash / peak thresholds stay portable across changes to the
+// product's fresh-session master default (channelManager.reset now seeds the
+// master at 0.5 per the loudness-normalization plan). Phase 3 of processBlock
+// applies the GLOBAL main channel's volume, so these signal-correctness tests
+// must pin it — just as they pin sampleRate — to assert the DSP math rather
+// than the UI default. Restores afterward.
+func pinMasterVolume(t *testing.T, v float64) {
+	t.Helper()
+	mainCh := channelForInstrument("")
+	old := mainCh.Volume()
+	mainCh.SetVolume(v)
+	t.Cleanup(func() { mainCh.SetVolume(old) })
+}
+
 // assertNoNaNOrClip fails if the master has any NaN/Inf or exceeds full scale.
 func assertNoNaNOrClip(t *testing.T, x []float64) {
 	t.Helper()
@@ -175,6 +190,7 @@ func assertNoNaNOrClip(t *testing.T, x []float64) {
 func TestBurstVoiceLandsAtOffset(t *testing.T) {
 	ResetInstruments()
 	t.Cleanup(func() { ResetInstruments() })
+	pinMasterVolume(t, 1.0) // after ResetInstruments seeds the 0.5 session default
 
 	off := sampleRate / 100 // 10ms in
 	m := newTestMixer()
@@ -265,6 +281,7 @@ func TestRenderCircuitOnsetsMatchSchedule(t *testing.T) {
 // hash-pin so any future signal regression is caught byte-for-byte.
 func TestComplexCircuitSimpleAudioByteExact(t *testing.T) {
 	pinSampleRate(t, 48000)
+	pinMasterVolume(t, 1.0) // golden pins the DSP, not the 0.5 session-default master
 	pred, rows, div := buildComplexNodeRuleCircuit(t)
 	trigs := enumerateTriggers(pred, rows, div, 120, sampleRate, 4.0)
 	if len(trigs) < 20 {

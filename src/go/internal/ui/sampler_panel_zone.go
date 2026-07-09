@@ -607,12 +607,13 @@ func (s *samplerState) ensureKnobGrid() *ControlGrid {
 	return s.knobGrid
 }
 
-// layoutSamplerKnobsScrolling lays the five knobs out in a single vertical
-// column inside gridR, scrolling when they overflow. Each cell reserves a band
-// above the dial for the group label (TRIM/TUNE/LEVEL), the dial itself at the
-// density ideal, and a caption band below. Off-window knobs get an empty rect so
-// drawSamplerKnobs / samplerTabHitAreas skip them. Mirrors the Synth tab's
-// ControlGrid usage (SetMaxCols(1) on mobile).
+// layoutSamplerKnobsScrolling lays the five knobs out in a width-adaptive
+// grid (ControlGrid's native column selection, capped at 4) inside gridR,
+// scrolling when the rows overflow. Each cell reserves a band above the
+// control for the group label (TRIM/TUNE/LEVEL), the control band at the
+// density ideal, and a caption band below. Off-window knobs get an empty rect
+// so drawSamplerKnobs / samplerTabHitAreas skip them. Mirrors the Synth tab's
+// ControlGrid usage (same 4-column mobile cap).
 func (dv *DrumView) layoutSamplerKnobsScrolling(gridR image.Rectangle, dv2 densityValues) {
 	s := &dv.sampler
 	grid := s.ensureKnobGrid()
@@ -627,7 +628,7 @@ func (dv *DrumView) layoutSamplerKnobsScrolling(gridR image.Rectangle, dv2 densi
 	if cellH < 1 {
 		cellH = 1
 	}
-	grid.SetMaxCols(1)
+	grid.SetMaxCols(4)
 	grid.Layout(gridR, samplerKnobCount, dv2.SynthKnobIdeal, cellH, SpaceSM, SpaceXS)
 
 	for i, k := range s.knobs {
@@ -792,7 +793,7 @@ func (dv *DrumView) buildSamplerButtons(hasBuf bool) {
 		// off samplerState.reverse (the net flip parity), so it reflects the live
 		// reversed state identically on every platform.
 		{NewSpecButton(i18n.T(i18n.KeyReverse), toggleSpec(s.reverse), guard(func() {
-			dv.sampler.reverseBuffer()
+			dv.sampler.toggleReverse()
 			dv.commitSamplerEdit()
 		})), "sampler-reverse", func() bool { return dv.sampler.reverse }},
 		{NewSpecButton(i18n.T(i18n.KeyNormalize), toggleSpec(s.normalize), guard(func() {
@@ -985,14 +986,20 @@ func (dv *DrumView) drawSamplerKnobs(dst *ebiten.Image) {
 				DrawTextColorAtScale(dst, gloss, glossX, labelY+2, WithAlpha(TokenTextSecondary(), AlphaMedium), captionScale)
 			}
 		}
-		// Mobile: render the tap-to-open value-pill button (the value caption is
-		// drawn below); desktop keeps the rotary dial. Mirrors the Synth tab.
-		if Profile().IsMobile() {
-			drawKnobValuePillRect(dst, dv.samplerMobileKnobButtonRect(i), samplerKnobCaption(i, s))
+		// Mobile: render the tap-to-open value-pill button (VALUE only — the
+		// caption band below carries the param NAME, so nothing renders
+		// twice); desktop keeps the rotary dial with the full name+value
+		// caption. Mirrors the Synth tab.
+		mobile := Profile().IsMobile()
+		if mobile {
+			drawKnobValuePillRect(dst, dv.samplerMobileKnobButtonRect(i), samplerKnobValueText(i, s))
 		} else {
 			k.Draw(dst)
 		}
 		cap := samplerKnobCaption(i, s)
+		if mobile {
+			cap = samplerKnobNameText(i, s)
+		}
 		// Caption sits just below the dial. The dial is a knobD square at the
 		// top of the knob rect, so its bottom = r.Min.Y + r.Dx() (== knobD).
 		dialD := r.Dx()
@@ -1079,6 +1086,34 @@ func (dv *DrumView) drawSamplerWaveform(dst *ebiten.Image) {
 // coherently with the Synth tab (Pitch "+0 st", Fine "+0 c", Gain "+0 dB")
 // because the facet formatters delegate to the shared formatParamValue.
 func samplerKnobCaption(idx int, s *samplerState) string {
+	name := samplerKnobNameText(idx, s)
+	value := samplerKnobValueText(idx, s)
+	if name == "" {
+		return ""
+	}
+	return name + " " + value
+}
+
+// samplerKnobNameText returns just the parameter name ("Start", "Pitch").
+// The mobile caption band uses it: the value pill above already shows the
+// value, so a name+value caption rendered the same string twice (the
+// "Start 0% / Start 0%" duplicate — A9, 2026-07-04 critique).
+func samplerKnobNameText(idx int, s *samplerState) string {
+	key, _, ok := samplerKnobEditField(idx, s)
+	if !ok {
+		return ""
+	}
+	f, ok := sampleEditFacet(key)
+	if !ok {
+		return ""
+	}
+	return f.renderLabel()
+}
+
+// samplerKnobValueText returns just the formatted value ("15 %", "+0 st").
+// The mobile value pill shows it — matching the Synth tab's pill, which
+// also carries the value alone.
+func samplerKnobValueText(idx int, s *samplerState) string {
 	key, val, ok := samplerKnobEditField(idx, s)
 	if !ok {
 		return ""
@@ -1087,7 +1122,7 @@ func samplerKnobCaption(idx int, s *samplerState) string {
 	if !ok {
 		return ""
 	}
-	return f.renderLabel() + " " + f.format(val)
+	return f.format(val)
 }
 
 // samplerKnobEditField maps a Sampler knob index to its sample_edit map key and

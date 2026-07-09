@@ -43,6 +43,9 @@ func (g *Game) handleEditor() {
 	// touch-to-mouse override; transitioning to two fingers must not
 	// be treated as a mouse release that completes the click.
 	if globalTouchState.ActiveTouchCount() >= 2 {
+		if g.marquee.active {
+			g.marquee = marqueeDrag{}
+		}
 		g.pendingClick = false
 		g.leftPrev = left
 		return
@@ -117,6 +120,18 @@ func (g *Game) handleEditor() {
 	}
 
 	if y < gridTopOffset() || !g.split.InGridPane(x, y) {
+		// A marquee drag/release that leaves the grid pane must be cancelled
+		// here, NOT left dangling: this early return sits before the
+		// shift/marquee branch below, so handleMarquee's release path never
+		// runs while the cursor is outside the pane. Left unattended,
+		// g.marquee.active stays true (dead camera pan — panOK gates on it
+		// globally) and re-entering the grid pane with the button up replays
+		// a stale release against frozen start/cur coords, potentially
+		// creating a phantom group. This is a cancel, not a release: no
+		// group creation, no menu open.
+		if g.marquee.active {
+			g.marquee = marqueeDrag{}
+		}
 		g.pendingClick = false
 		g.leftPrev = left
 		return
@@ -134,12 +149,24 @@ func (g *Game) handleEditor() {
 		return
 	}
 
-	// ---------------- link drag (shift held OR drag in progress) ----
-	if g.linkDrag.active || shift {
-		// For link drag, prioritize screen-hit for nodes.
-		if left && !g.linkDrag.active && shift {
+	// ---------------- link drag / marquee (shift held OR either in progress) ----
+	if g.linkDrag.active || g.marquee.active || shift {
+		// For link drag, prioritize screen-hit for nodes (verbatim from the
+		// pre-marquee implementation — only the trailing "else" below, taken
+		// when the press lands on empty space, is new).
+		// Gated on the press EDGE (left && !g.leftPrev): without it, a plain
+		// left-drag already in progress (e.g. camera pan) that then has Shift
+		// pressed mid-hold would arm a link-drag/marquee here using the
+		// CURRENT (already-dragged) cursor position instead of a fresh press
+		// position, corrupting the gesture.
+		if left && !g.leftPrev && !g.linkDrag.active && !g.marquee.active && shift {
 			if n := g.nodeAtScreen(x, y); n != nil {
 				g.linkDrag = dragLink{from: n, active: true}
+			} else {
+				// Marquee claims Shift+press on EMPTY space.
+				g.handleMarquee(left, x, y)
+				g.leftPrev = left
+				return
 			}
 		} else if g.linkDrag.active && !left {
 			if n2 := g.nodeAtScreen(x, y); n2 != nil && n2 != g.linkDrag.from {
@@ -156,6 +183,11 @@ func (g *Game) handleEditor() {
 			g.linkDrag = dragLink{}
 		} else if g.linkDrag.active && left {
 			g.linkDrag.toX, g.linkDrag.toY = gx, gy
+		} else if g.marquee.active {
+			// Marquee drag continuing, or its release frame.
+			g.handleMarquee(left, x, y)
+			g.leftPrev = left
+			return
 		}
 		return
 	}
@@ -220,6 +252,7 @@ func (g *Game) handleEditor() {
 				g.sel = n
 				n.Selected = true
 				g.sidebar.Open(n)
+				g.groupMenu.Close()
 				g.computeSelNeighbors()
 				g.coordBadgeNode = n
 				g.coordBadgeFrame = g.frame
@@ -238,6 +271,7 @@ func (g *Game) handleEditor() {
 					g.computeSelNeighbors()
 				}
 				g.sidebar.Close()
+				g.groupMenu.Close()
 			}
 		}
 		g.pendingClick = false

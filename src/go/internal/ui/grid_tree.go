@@ -19,9 +19,11 @@ const (
 	GZCoordBadge     = 40
 	GZMoveMode       = 42
 	GZConnectMode    = 44
+	GZMarquee        = 46
 	GZLongPress      = 50
 	GZMoveConfirm    = 52
 	GZSidebar        = 60
+	GZGroupMenu      = 62
 	GZCursorLabel    = 70
 	GZGridHelpButton = 80
 )

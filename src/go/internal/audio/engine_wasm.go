@@ -36,6 +36,26 @@ func Register(id string, inst Instrument) {
 	InstrumentChannel(id)
 }
 
+// Unregister removes a runtime-registered instrument id from the playable set
+// (the inverse of Register). No-op if absent.
+func Unregister(id string) {
+	instrumentsMu.Lock()
+	found := false
+	out := instruments[:0]
+	for _, existing := range instruments {
+		if existing == id {
+			found = true
+			continue
+		}
+		out = append(out, existing)
+	}
+	instruments = out
+	instrumentsMu.Unlock()
+	if found {
+		bumpInstrumentsVersion()
+	}
+}
+
 func Play(id string, when ...float64) {
 	fn := js.Global().Get("playSound")
 	if !fn.Truthy() {

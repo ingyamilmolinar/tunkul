@@ -80,17 +80,21 @@ func New(logger *game_log.Logger) *Game {
 		nodeHLUntil:                 map[model.NodeID]highlightWindow{},
 		lastStepsOffset:             -1,
 		lastCellTypesOffset:         -1,
-		parityRing:                  newMismatchRing(256),
-		parityStreak:                make(map[string]int),
-		parityWatch:                 parityWatchDefault,
-		parityAudioMaxIdx:           []int{},
-		paritySeqDecisions:          make(map[int]map[int]paritySeqDecision),
-		parityScanEvery:             parityScanEveryFrames,
-		parityScanStride:            parityScanStride,
 		importPrevParityFatal:       true,
 		importPrevParityWatch:       parityWatchDefault,
 	}
+	// Parity diagnostics state lives in the embedded parityTracker; set as
+	// statements because promoted (embedded) fields can't be keyed in a
+	// composite literal.
+	g.parityRing = newMismatchRing(256)
+	g.parityStreak = make(map[string]int)
+	g.parityWatch = parityWatchDefault
+	g.parityAudioMaxIdx = []int{}
+	g.paritySeqDecisions = make(map[int]map[int]paritySeqDecision)
+	g.parityScanEvery = parityScanEveryFrames
+	g.parityScanStride = parityScanStride
 	g.sidebar = NewNodeSidebar(g)
+	g.groupMenu = NewGroupMenu(g)
 	g.perfMode.SetFastPath(defaultPerfFastPath)
 	if runningUnderGoTest() {
 		g.parityScanEvery = 1
@@ -335,6 +339,8 @@ func New(logger *game_log.Logger) *Game {
 			g.refreshDrumRow()
 		}
 	})
+	g.graph.SetGroupChangedHook(func(model.GroupID) { g.onGroupsChanged() })
+	g.refreshGroupIndex()
 	g.rebuildNodeCache()
 	g.storeSeqPathSnapshot()
 	if runningUnderGoTest() {

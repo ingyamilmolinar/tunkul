@@ -342,11 +342,13 @@ eventsDone:
 			g.split.guardFrames--
 		}
 
-		// Rebuild handler list only when sidebar state changes.
+		// Rebuild handler list only when sidebar/group-menu state changes.
 		sidebarOpen := g.sidebar.IsOpen()
-		if g.dispatcherDirty || sidebarOpen != g.lastDispatcherSidebarOpen {
+		groupMenuOpen := g.groupMenu.IsOpen()
+		if g.dispatcherDirty || sidebarOpen != g.lastDispatcherSidebarOpen || groupMenuOpen != g.lastDispatcherGroupMenuOpen {
 			g.dispatcherDirty = false
 			g.lastDispatcherSidebarOpen = sidebarOpen
+			g.lastDispatcherGroupMenuOpen = groupMenuOpen
 			g.inputDispatcher.Clear()
 			// Settings gear: registered at the TOP z (gridHelpInputZ=300) so a
 			// press inside its rect wins over the grid editor on every platform.
@@ -358,6 +360,9 @@ eventsDone:
 			}
 			if sidebarOpen {
 				g.inputDispatcher.Register(g.sidebar)
+			}
+			if groupMenuOpen {
+				g.inputDispatcher.Register(g.groupMenu)
 			}
 			g.inputDispatcher.Register(g.split)
 			if g.drum != nil {
@@ -386,6 +391,16 @@ eventsDone:
 		if !inputHandled && !g.blocksAt(mx, my) {
 			g.handleEditor()
 		} else {
+			// A marquee drag whose release frame is consumed by an overlay
+			// (GroupMenu, sidebar, settings gear, ...) never reaches
+			// handleEditor's own release/out-of-pane cancel paths. Left
+			// dangling, g.marquee.active stays true forever — panOK gates
+			// camera pan on it, so panning goes dead — and the next plain
+			// grid click would replay the stale start/cur rect into a
+			// phantom group. Cancel only: never create a group here.
+			if g.marquee.active {
+				g.marquee = marqueeDrag{}
+			}
 			g.leftPrev = left
 		}
 	}
@@ -582,7 +597,7 @@ eventsDone:
 	// Camera panning always runs - essential for grid interaction on all platforms.
 	// Not guarded by fastPath since it's just mouse delta math (not expensive).
 	shift := isKeyPressed(ebiten.KeyShiftLeft) || isKeyPressed(ebiten.KeyShiftRight)
-	panOK := !g.linkDrag.active && !g.split.dragging && !shift && !pt(mx, my, g.drum.Bounds) && !g.drum.Capturing() && !g.menuHit(mx, my) && !g.longPressPopup && !g.modalOverlayActive() && !blockLandscapeInput
+	panOK := !g.linkDrag.active && !g.marquee.active && !g.split.dragging && !shift && !pt(mx, my, g.drum.Bounds) && !g.drum.Capturing() && !g.menuHit(mx, my) && !g.longPressPopup && !g.modalOverlayActive() && !blockLandscapeInput
 
 	// Diagnostic: log why panOK is false for grid touches on mobile.
 	// Throttled to once per 60 frames to avoid log spam.

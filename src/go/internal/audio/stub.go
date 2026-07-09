@@ -5,6 +5,7 @@ package audio
 import (
 	"math"
 	"sync"
+	"sync/atomic"
 
 	"github.com/ingyamilmolinar/beatmo/internal/analyzer"
 	"github.com/ingyamilmolinar/beatmo/internal/scope"
@@ -35,6 +36,24 @@ func registerStub(id string) {
 
 func Register(id string, inst Instrument) {
 	registerStub(id)
+}
+
+// Unregister removes a runtime-registered instrument id from the stub set (the
+// inverse of Register). No-op if absent.
+func Unregister(id string) {
+	found := false
+	out := insts[:0]
+	for _, existing := range insts {
+		if existing == id {
+			found = true
+			continue
+		}
+		out = append(out, existing)
+	}
+	insts = out
+	if found {
+		bumpInstrumentsVersion()
+	}
 }
 
 func RegisterAudio(id, path string) error {
@@ -109,9 +128,30 @@ func Close() {}
 // Reset is a stub used during tests.
 func Reset() { resetChannels() }
 
-var SetBPMFunc = func(int) {}
+// bpmFunc holds the test BPM hook. It is stored atomically because SetBPM is
+// invoked from Game.Update goroutines while tests swap the hook (and restore
+// it in a defer) from the test goroutine — a plain package var raced there.
+var bpmFunc atomic.Pointer[func(int)]
 
-func SetBPM(bpm int) { SetBPMFunc(bpm) }
+func init() {
+	noop := func(int) {}
+	bpmFunc.Store(&noop)
+}
+
+func SetBPM(bpm int) {
+	if fp := bpmFunc.Load(); fp != nil {
+		(*fp)(bpm)
+	}
+}
+
+// BPMFuncForTest returns the currently installed BPM hook. Tests use it to
+// capture the previous hook before overriding via SetBPMFuncForTest.
+func BPMFuncForTest() func(int) {
+	if fp := bpmFunc.Load(); fp != nil {
+		return *fp
+	}
+	return nil
+}
 
 // Instruments returns placeholder instrument IDs during tests.
 func Instruments() []string { return insts }

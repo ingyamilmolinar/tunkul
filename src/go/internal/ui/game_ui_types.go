@@ -33,6 +33,16 @@ type dragLink struct {
 	active   bool
 }
 
+// marqueeDrag tracks the Shift+drag-from-empty-space group-selection gesture.
+// Screen-space (px), not world/grid coords — the marquee is a pure screen
+// overlay drawn before any camera transform, mirroring how dragLink stores
+// toX/toY in grid-snapped world coords for its own different purpose.
+type marqueeDrag struct {
+	active         bool
+	startX, startY int // screen px at press
+	curX, curY     int // screen px, updated each frame while held
+}
+
 type pulse struct {
 	x1, y1, x2, y2           float64
 	t, speed                 float64
@@ -54,6 +64,17 @@ type soundReq struct {
 	hasWhen bool
 	enqAt   time.Time
 	gen     uint64
+	// parityGen is the parity generation in effect when this sound was
+	// SCHEDULED (enqueued), captured under the same seqMu section that records
+	// the matching seq decision. The audioLoop may only record the parity audio
+	// event much later (goroutine lag under load), by which time a structural
+	// mutation (e.g. a BPM change) can have advanced g.parityGen. Stamping the
+	// event with the current generation at record time would land the audio on
+	// a newer generation than its decision, so the parity gen-filter drops the
+	// decision but keeps the audio — a phantom audio_vs_seq mismatch. Carrying
+	// the scheduling generation here keeps both sides of the comparison in the
+	// same generation (see recordParityAudio + parityScan gen filter).
+	parityGen uint64
 	// Parity metadata (row/abs) is only set for sequencer-driven playback
 	// events. Preview sounds use (-1,-1) to avoid polluting parity buffers.
 	row int

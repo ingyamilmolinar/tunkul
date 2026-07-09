@@ -78,13 +78,17 @@ func (dv *DrumView) samplerMobileKnobButtonRect(idx int) image.Rectangle {
 		cell = dialR
 	}
 	band := image.Rect(cell.Min.X, dialR.Min.Y, cell.Max.X, dialR.Max.Y)
-	return knobValuePillRect(band, samplerKnobCaption(idx, s), 0)
+	// Size to the VALUE label — that's what the pill renders (the name
+	// lives in the caption band below).
+	return knobValuePillRect(band, samplerKnobValueText(idx, s), 0)
 }
 
 // closeSamplerKnobWheelPopup closes the mobile scroll-wheel for sampler knobs.
+// Navigating away persists the pending edit (Accept commits + closes; no-op if
+// already closed).
 func (dv *DrumView) closeSamplerKnobWheelPopup() {
 	if dv.samplerWheelPopup != nil {
-		dv.samplerWheelPopup.Close()
+		dv.samplerWheelPopup.Accept()
 	}
 	dv.closeSamplerWheelPortal()
 }
